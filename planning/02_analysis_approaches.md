@@ -1,45 +1,94 @@
 # Analysis Approaches for Detecting Photosensitive Triggers
 
-We need fast, lightweight detection (no heavy LLM). Possible approaches:
+The detector must be fast, deterministic, offline, and implementable in both Python and Go.
+This document compares approaches independently of the original Discord bot.
 
-## 1) Frame-difference / luminance threshold approach (classic PEAT-like)
-This is similar to the Harding FPA/PEAT tools used in broadcasting. Core idea:
-- Extract frames from GIF/video at a reasonable rate (or all frames)
-- For each frame compute relative luminance for pixels (or average/region)
-- Detect transitions: look for pairs (up/down) in luminance that cross threshold
-- Track flashes per second and size of flashing area
-- Apply WCAG-style rules
+## 1) Frame-difference / luminance threshold approach (recommended)
+
+This is the approach used by broadcast tooling such as Harding FPA and PEAT, and it maps
+directly to WCAG 2.3.1.
+
+Core idea:
+- Decode frames with timestamps (or use caller-supplied frames)
+- Compute relative luminance per pixel (sRGB, gamma-corrected)
+- Detect opposing luminance transitions that exceed the WCAG threshold
+- Pair up/down transitions into flash events
+- Track saturated-red transitions separately
+- Count flashes in sliding one-second windows using real timestamps
+- Estimate the flashing area and apply the area rule for low-rate flashes
 
 Pros:
 - Fast, deterministic, well-understood for this exact problem
-- Low compute cost, can run in Go/Python easily
-- Matches the kind of triggers described (full-screen color changes, flashlight effects)
-- Can be tuned to WCAG thresholds
+- Low compute cost; easy to implement in Python and Go
+- Matches the known triggers (full-screen color changes, flashlight effects)
+- Directly tunable to WCAG thresholds and explainable in a result
 
 Cons:
-- May miss some complex patterns; need careful implementation
-- Need good frame extraction (ffmpeg/gifski etc)
-- Red flashes need special handling
+- Requires care: pairing transitions, timestamps, area approximation, red saturation
+- Depends on reliable frame decoding (GIF disposal modes, variable frame rate video)
+- Some complex patterns (localized flicker, camera motion, strobing text) are harder to model
+
+This remains the correct starting point.
 
 ## 2) Histogram/HSV change detection
-- Look at rapid changes in brightness/value or saturation
+
+- Track rapid changes in brightness (value) or saturation histograms
 - Detect high-frequency oscillation
 
-Less precise than luminance transition pairs, but simpler.
+Pros:
+- Simple and cheap
+- Robust to small spatial shifts
 
-## 3) ML/classification (but user said avoid heavy/slow/costly)
-- Could train on examples (we have giphy.lst of known bad ones)
-- But collecting/training is effort; inference might be fast with small model but still more complex than rule-based
-- Maybe possible later, but rule-based is better starting point
+Cons:
+- Does not identify opposing luminance pairs or area
+- Higher false-positive rate on motion and scene cuts
+- Cannot produce WCAG-aligned evidence
 
-## Recommendation: Start with WCAG-aligned rule-based luminance flash detection
-This directly maps to the problem and matches examples (uniform color changes = big luminance swings). Tools like PEAT use this approach.
+Useful as a **pre-filter or signal**, not as the primary classifier.
+
+## 3) ML/classification
+
+- Train on known-bad examples (`giphy.lst`) and negatives
+- Use a small model for inference
+
+Pros:
+- Could learn patterns not captured by hand-written rules
+
+Cons:
+- Limited labeled data; hard to prove coverage
+- Opaque decisions for a safety feature
+- Slower and more complex to ship in two languages
+- The physical thresholds are already specified by WCAG
+
+Rejected for v1. Revisit only as an optional supplementary signal with a clear dataset and
+evaluation story.
+
+## Recommendation
+
+Implement **WCAG-aligned rule-based luminance/red flash detection** as the core, with a clean
+separation between decoding and analysis.
 
 ### Implementation details needed
-- Frame extraction: for GIF use `giflib`/`image/gif` or `ffmpeg`; for MP4 use `ffmpeg`/`avcodec`
-- Color space conversion to sRGB, compute relative luminance per pixel
-- Downsample? Or analyze full frame - area matters. But analyzing every pixel every frame can be expensive for large videos; might need to downsample to reasonable resolution
-- Find flash events: detect when luminance crosses thresholds creating opposing transitions
-- Count flashes in sliding 1-second windows
-- Track contiguous flashing areas
-- Red flash detection: check for saturated red transitions
+
+- **Frame timing**: per-frame timestamps/durations; never assume 30 fps
+- **Decoding**: GIF via the language's native decoder; video via ffmpeg streaming
+- **Frame input**: allow callers to supply frames to bypass decoders entirely
+- **Color**: convert to sRGB, composite alpha, compute luminance
+- **Downsampling**: retain enough resolution for area estimation; record the scale
+- **Transition pairing**: identify state changes and form opposing pairs
+- **Windowing**: sliding 1-second windows over timestamps
+- **Area**: per-cell changed-area map with a documented 10-degree-field approximation
+- **Red**: perceptual saturation test plus opposing transition
+- **Result**: classification, risk level, reasons, measurements, metadata
+- **Parity**: share fixtures and expected outputs between Python and Go
+
+## Known gaps in the current prototype
+
+- Whole-frame average instead of a spatial area map
+- Assumed 30 fps instead of real timestamps
+- Counts frame differences rather than opposing flash pairs
+- Red heuristic is an RGB ratio, not perceptual saturation
+- No handling of GIF loop wrap-around
+- No typed errors or resource limits for untrusted input
+
+These are planned work items, not reasons to change the approach.

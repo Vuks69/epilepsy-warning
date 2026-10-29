@@ -1,42 +1,120 @@
 # Tech Stack Selection
 
-User preferences:
-- Comfortable with Go (disgo) or Python (discord.py)
-- If Go and ends up in ../pen-bot/ that's a bonus but not priority - build as standalone useful bot first
-- Must be fast enough (seconds or faster), no LLM
+The project is now a library, so the stack decisions are about **packaging, distribution, and
+cross-language parity**, not bot hosting.
 
-## Options
+Requirements:
+- Callable from Python and Go projects
+- No LLM; fast enough for interactive use
+- No cgo, no complicated native build chain for consumers
+- Reproducible results across languages for the same media
+- Minimal, well-maintained dependencies
 
-### Option A: Go + disgo
+## Language strategy
+
+### Option A: Native implementations in both languages (recommended)
+- Python package as the reference implementation
+- Go module as a native port
+- A shared, versioned **conformance suite** (fixtures + expected results) keeps them aligned
+
 Pros:
-- Fast, efficient, single binary
-- User knows it well, could integrate into pen-bot later
-- Good for performance if processing many frames
-- Libraries: `github.com/disgoorg/disgo`, `github.com/disgoorg/disgo/bot` etc
-- Image/video: can use `ffmpeg` via exec or libraries like `gocv` (heavy deps) or `goav`, or easier use external ffmpeg
-- GIF: `image/gif` in stdlib is possible but limited; may need to decode frames
-- HTTP: stdlib/fiber etc
+- Idiomatic API in each ecosystem
+- No cgo/FFI/subprocess bridge to distribute
+- Each language can optimize decoding for its platform
+- Python ships fastest; Go can follow once the algorithm stabilizes
 
 Cons:
-- Frame decoding/video processing in pure Go can be cumbersome; often easier to shell out to ffmpeg
-- Some libraries less mature
+- Two codebases to maintain; drift is possible without strong conformance tests
 
-### Option B: Python + discord.py (or py-cord/nextcord)
+Mitigation: the WCAG rules are small and deterministic. Treat the Python implementation as the
+specification, keep the result schema identical, and run the same fixtures in both CI pipelines.
+
+### Option B: One core plus bindings
+Implement the core once (Go, Rust, or C) and expose Python bindings.
+
 Pros:
-- Rich ecosystem for image/video processing: PIL/Pillow, opencv-python, imageio, moviepy
-- Easy to prototype flash detection
-- Quick to get working
-- Can use `imageio` to read GIF frames directly
+- One algorithm implementation
+- Consistent behavior by construction
 
 Cons:
-- More overhead than Go, but still probably fast enough for small/short media
-- Deployment different (needs Python env)
+- cgo/FFI or a compiled extension complicates wheels and cross-platform distribution
+- Debugging and contributions are harder
+- Overkill for a CPU-light, rule-based analyzer
 
-## Recommendation
-Start with **Python** for rapid prototyping of the detection algorithm - easier to test against the examples and iterate on WCAG thresholds. Once algorithm is solid and working well, can port to Go if desired for integration into pen-bot or performance.
+### Option C: CLI/subprocess bridge
+Ship one binary/CLI and have both languages call it.
 
-But let us look up what's available - check if there might be existing patterns. Also the user says "framework and bot language need to be selected" - we need to plan both.
+Pros:
+- Trivial cross-language reuse
 
-Alternatively maybe use Go with ffmpeg subprocess calls - that's practical. Let us design for either but pick one to start implementing plan.
+Cons:
+- Process and temp-file overhead per scan
+- Awkward error handling and cancellation
+- Poor fit for high-throughput servers or in-memory bytes
 
-Given examples exist and we need to analyze them, Python is faster to experiment with. Let us plan for Python first as the initial implementation path.
+**Recommendation: Option A.** Build the Python library first (the existing prototype already
+proves the concept), stabilize the algorithm and result schema, then port to Go and validate
+against the shared fixtures. Revisit Option B only if parity maintenance becomes painful.
+
+## Python stack
+
+- **Runtime**: Python >= 3.9 (keep in sync with `pyproject.toml`; consider 3.10+ once 3.9 is
+  dropped upstream)
+- **Build**: `hatchling`, `src/` layout, `py.typed` marker
+- **Core deps**:
+  - `numpy` - vectorized luminance/area math
+  - `Pillow` - GIF/frame decoding and downsampling
+  - `imageio` + `imageio-ffmpeg` - video frame iteration without a system ffmpeg requirement
+- **Removed deps**: `discord.py`, `PyNaCl`, `aiohttp`, `python-dotenv` (no bot/network in core)
+- **Optional extras**:
+  - `[video]` for video decoding if we decide to keep it out of the base install
+  - `[dev]` for pytest, ruff, mypy
+- **Packaging**: publish to PyPI as `epilepsy-warning`; import package `epilepsy_warning`
+- **Typing**: full annotations, PEP 561 marker, public API re-exported from `__init__.py`
+- **CLI**: `epilepsy-scan` entry point, a thin wrapper over the library (useful for CI and manual
+  checks; not the primary interface)
+
+`imageio-ffmpeg` bundles an ffmpeg binary, which simplifies installation but should be treated
+as an optional, replaceable decoder. The API must also accept caller-supplied frames so users
+can avoid a bundled decoder entirely.
+
+## Go stack
+
+- **Module**: `github.com/<owner>/epilepsy-warning` (final path TBD when published)
+- **Core deps**: standard library only for the analysis math and GIF decoding (`image/gif`)
+- **Video decoding**: `os/exec` ffmpeg with argv arrays, streaming raw frames over stdout.
+  No `shell=True` equivalent, no cgo.
+- **Optional pure-Go decoding**: `golang.org/x/image` for additional still/animated formats where
+  practical; video remains ffmpeg-backed
+- **Packaging**: a normal Go module; consumers run `go get`
+- **API**: context-aware (`AnalyzeFile(ctx, path, opts)`), no global state, options by value
+- **Testing**: `go test`, table tests, same fixture corpus as Python
+
+If requiring a system ffmpeg is unacceptable for a Go consumer, they can decode frames
+themselves and call `epilepsy.AnalyzeFrames(...)`; the decoder boundary is part of the public API.
+
+## Cross-language contract
+
+- **Result schema**: a versioned, JSON-serializable struct/document. Field names and semantics
+  must match across Python and Go.
+- **Conformance fixtures**: small checked-in media files with expected classifications and
+  tolerances for floating-point measurements.
+- **Thresholds**: defined once in a shared document, duplicated as constants, and asserted by
+  tests in both languages.
+- **Semantic versioning**: schema or threshold changes that alter classifications are breaking
+  changes (major version).
+
+## Alternatives considered
+
+- **OpenCV in the core**: powerful, but a large dependency for consumers and unnecessary for
+  luminance math. Keep it as a dev/benchmark tool only.
+- **moviepy/pyav**: heavier than needed and can pull in system codecs; `imageio` + ffmpeg covers
+  the use case.
+- **ML classifier**: rejected; training data is limited, inference is slower and opaque, and the
+  WCAG rules already encode the relevant physics.
+
+## Recommendation summary
+
+Python reference library first, native Go port second, shared conformance fixtures and result
+schema. Keep the core dependency-light, decoder-agnostic at the API boundary, and free of any
+Discord/network code.

@@ -1,26 +1,63 @@
 ## Problem/idea
-Discord bot that scans user messages containing gifs and (small/short) video files (or links) sent by users for potential epilepsy-inducing imagery.
 
-The bot needs to:
-- use the MESSAGE_CONTENT intent to get the media to scan
-- download the media file
-- analyze the file
-- declare the file as epilepsy-triggering or not
+Developers routinely display user-supplied GIFs and short videos without checking them for
+photosensitive epilepsy triggers. A Discord bot was the original motivating use case, but the
+actual reusable value is the **detection engine**, not the bot.
+
+Build a **code library** that other Python and Go projects can embed to answer one question:
+
+> Does this media file contain flashing content that is likely to trigger photosensitive epilepsy?
+
+The library should:
+- accept a local file, raw bytes, or caller-supplied frames
+- detect general luminance flashes and red flashes using WCAG 2.1 thresholds
+- return a structured, stable result (classification, evidence, limits, version)
+- run offline and fast enough for interactive moderation/upload flows (seconds or faster)
+- avoid LLM/ML inference entirely
+
+The library should **not** own:
+- Discord (or any chat platform) event handling
+- downloading media from URLs
+- moderation actions (warn/delete/react)
+- persistent storage
+- a hosted service
+
+Those belong to the consuming application. A Discord bot can be shipped later as an example
+consumer, but it is not part of this project's scope.
+
+## Consumers
+
+- Chat/moderator bots (Discord, Matrix, Slack, ...)
+- Social/media upload pipelines that warn or block before publishing
+- CMS and forum software
+- CI checks for media assets
+- Desktop/mobile backends written in Python or Go
 
 ## Questions
-Primary choice is likely the method used to analyze the files. AI/LLM analysis is out of question due to being overkill, too slow and too costly. This needs to be able to return the result within a few seconds, or faster.
-Machine learning or some sort of classification/fuzzing could work, but how would we classify gifs?
-Photosensitive epilepsy in those could be fast changing colors, levels of brightness etc; could be full-image color switches every frame or be a recording of a flashlight going back and forth in front of the camera.
 
-Once a method is chosen, the framework and bot language need to be selected.
-I'm comfortable with Go (using the disgo library), and if necessary, Python (discord.py).
-If the implementation is done in Go, it may end up being included in an existing Go discord bot project (../pen-bot/), but that's a secondary consideration/cherry on top, not a priority. A bot like this may well become a useful/popular moderation tool on its own.
+Primary choice is the detection method. AI/LLM analysis is out of the question due to being
+overkill, too slow and too costly. This needs to be able to return the result within a few
+seconds, or faster. Rule-based luminance/flash analysis maps directly to WCAG and the known
+examples.
+
+Language strategy is the second question:
+- one shared implementation with bindings, or
+- native implementations in both Python and Go, kept consistent by a shared spec and
+  conformance fixtures?
+
+See `03_tech_stack.md` for the options and recommendation. The plan assumes a Python reference
+implementation first, followed by a native Go port validated against the same fixtures.
 
 ## Sources
+
 https://www.epilepsy.com/what-is-epilepsy/seizure-triggers/photosensitivity
 https://en.wikipedia.org/wiki/Photosensitive_epilepsy
 https://www.w3.org/TR/WCAG21/#seizures-and-physical-reactions
 
 ## Examples for testing
-./examples/4882.mp4 is a video where the frames are one uniform color, changing color and brightness at random intervals.
-./examples/giphy.lst is a collection of direct gif links that are considered as seizure-inducing (aka would be removed in a discord server by a moderator).
+
+- `./examples/4882.mp4` is a video where the frames are one uniform color, changing color and
+  brightness at random intervals.
+- `./examples/giphy.lst` is a collection of direct GIF links that are considered
+  seizure-inducing (they would be removed in a Discord server by a moderator).
+- `./examples/giphy/*.gif` are downloaded copies of those links for offline tests.

@@ -1,31 +1,50 @@
 # Summary
 
-## What we've done
-1. Analyzed the problem - Discord bot to scan GIFs/videos for photosensitive epilepsy triggers
-2. Studied WCAG 2.1 flash thresholds (max 3 flashes/sec, area-based rules for fewer flashes)
-3. Examined examples - 4882.mp4 has rapid color changes, giphy.lst contains known seizure-inducing GIFs
-4. Created planning documentation in ./planning/
-5. Built Python prototype with WCAG-aligned flash detection
-6. Tested on examples - correctly identifies both as triggering
-7. Created Discord bot skeleton with message scanning, media downloading, analysis integration
+## Scope change
 
-## Key findings
-- Rule-based luminance change detection works well for this use case
-- Fast enough (processes videos in reasonable time)
-- No LLM needed - matches requirements
-- Python ecosystem is good for prototyping; could port to Go later if integrating into pen-bot
+The project was originally planned as a Discord bot. The reusable value is the detection engine,
+so the scope is now a **code library for Python and Go projects**. The bot is optional example
+code and owns all platform-specific concerns (intents, downloads, moderation actions, cleanup).
 
-## Files created
-- `planning/00_overview.md` through `06_summary.md`
-- `src/analyzer.py`, `src/analyzer_optimized.py` - detection logic
-- `src/bot.py` - Discord bot
-- `requirements.txt`, `.env.example`, `README.md`
-- `run_bot.sh`
+## What we know
 
-## Next steps (if continuing)
-- Add better frame rate detection for more accurate flash counting
-- Improve red flash detection per WCAG spec
-- Add support for more edge cases
-- Consider rate limiting, caching
-- Add tests
-- Maybe optimize for very large files
+1. Photosensitive epilepsy detection maps cleanly to WCAG 2.1 SC 2.3.1: opposing luminance
+   changes, flash rate per second, red flashes, and flashing area.
+2. Rule-based analysis is fast, deterministic, offline, and explainable. LLM/ML is out of scope.
+3. The existing Python prototype already flags the known examples (`4882.mp4`, `giphy/*.gif`),
+   proving the approach.
+4. A native Python library plus a native Go port, kept aligned by a shared result schema and
+   conformance fixtures, is simpler to distribute than FFI or a subprocess bridge.
+
+## Current state
+
+- Planning docs now describe a library, its public API, result schema, packaging, and a
+  Python-first / Go-second delivery plan.
+- The prototype in `src/` still contains the original bot and a rough analyzer. It needs a
+  refactor into a standalone package.
+
+## Known correctness gaps to close before v1
+
+- Real frame timestamps instead of an assumed 30 fps
+- Opposing flash pairs instead of raw frame differences
+- Spatial flashing-area estimation instead of a whole-frame average
+- Perceptual saturated-red detection instead of an RGB ratio heuristic
+- GIF loop wrap-around handling
+- Typed errors, resource limits, and timeouts for untrusted input
+
+## Deliverables
+
+- Python package `epilepsy-warning` (PyPI), importable as `epilepsy_warning`
+- Go module with the same API shape and result schema
+- Thin `epilepsy-scan` CLI
+- Shared fixture corpus and conformance tests
+- Documentation: usage, supported formats, thresholds, approximations, and limitations
+- Optional example consumer (e.g. a Discord bot) that depends on the library
+
+## Next steps
+
+1. Finalize options and the v1 result schema.
+2. Refactor the analyzer into a standalone Python library and remove bot dependencies.
+3. Fix timing, flash-pair, area, and red-detection correctness.
+4. Build the golden corpus, then port to Go and verify parity.
+5. Publish v1 for both languages.
