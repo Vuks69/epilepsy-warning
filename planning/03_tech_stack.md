@@ -26,8 +26,10 @@ Pros:
 Cons:
 - Two codebases to maintain; drift is possible without strong conformance tests
 
-Mitigation: the WCAG rules are small and deterministic. Treat the Python implementation as the
-specification, keep the result schema identical, and run the same fixtures in both CI pipelines.
+Mitigation: the standards rules are small and deterministic. Treat the Python implementation as
+the specification, keep the result schema identical, and run the same fixtures in both CI
+pipelines. The transition/area state machine is the main parity risk; test it with synthetic
+timing fixtures, not just real media.
 
 ### Option B: One core plus bindings
 Implement the core once (Go, Rust, or C) and expose Python bindings.
@@ -62,9 +64,14 @@ against the shared fixtures. Revisit Option B only if parity maintenance becomes
   dropped upstream)
 - **Build**: `hatchling`, `src/` layout, `py.typed` marker
 - **Core deps**:
-  - `numpy` - vectorized luminance/area math
+  - `numpy` - vectorized luminance/area math, CIE XYZ/UCS conversion, HDR transfer functions
   - `Pillow` - GIF/frame decoding and downsampling
   - `imageio` + `imageio-ffmpeg` - video frame iteration without a system ffmpeg requirement
+- **Color science**: implement sRGB -> linear -> XYZ -> CIE 1976 UCS and PQ/HLG transfer
+  functions directly; no extra dependency is required. Keep formulas in one shared reference
+  module with table-driven tests.
+- **Metadata**: prefer ffprobe/ffmpeg metadata for color space, transfer, and HDR mastering info.
+  If metadata is unavailable, assume sRGB/200 cd/m² and mark the result as assumed.
 - **Removed deps**: `discord.py`, `PyNaCl`, `aiohttp`, `python-dotenv` (no bot/network in core)
 - **Optional extras**:
   - `[video]` for video decoding if we decide to keep it out of the base install
@@ -84,6 +91,8 @@ can avoid a bundled decoder entirely.
 - **Core deps**: standard library only for the analysis math and GIF decoding (`image/gif`)
 - **Video decoding**: `os/exec` ffmpeg with argv arrays, streaming raw frames over stdout.
   No `shell=True` equivalent, no cgo.
+- **Color science**: implement the same sRGB/XYZ/UCS and HDR transfer formulas in a dedicated
+  package; share test vectors with Python.
 - **Optional pure-Go decoding**: `golang.org/x/image` for additional still/animated formats where
   practical; video remains ffmpeg-backed
 - **Packaging**: a normal Go module; consumers run `go get`
@@ -97,10 +106,11 @@ themselves and call `epilepsy.AnalyzeFrames(...)`; the decoder boundary is part 
 
 - **Result schema**: a versioned, JSON-serializable struct/document. Field names and semantics
   must match across Python and Go.
-- **Conformance fixtures**: small checked-in media files with expected classifications and
-  tolerances for floating-point measurements.
-- **Thresholds**: defined once in a shared document, duplicated as constants, and asserted by
-  tests in both languages.
+- **Conformance fixtures**: small checked-in media files plus synthetic frame sequences with exact
+  timestamps, expected classifications, and tolerances for floating-point measurements.
+- **Thresholds**: defined once in `01_wcag_flash_thresholds.md`, duplicated as constants, and
+  asserted by tests in both languages. Keep normative thresholds separate from the paper's
+  working values (66 ms, 20 ms, 65 Hz).
 - **Semantic versioning**: schema or threshold changes that alter classifications are breaking
   changes (major version).
 
@@ -118,3 +128,7 @@ themselves and call `epilepsy.AnalyzeFrames(...)`; the decoder boundary is part 
 Python reference library first, native Go port second, shared conformance fixtures and result
 schema. Keep the core dependency-light, decoder-agnostic at the API boundary, and free of any
 Discord/network code.
+
+Performance note: per-tile temporal state and a 20 ms synchronization window cost more memory
+than whole-frame differencing. Budget for a tile grid (e.g. 64x64 or 128x128), a bounded frame
+window, and streaming decoders; benchmark at 24/30/60/120 fps before choosing defaults.

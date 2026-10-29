@@ -9,14 +9,17 @@ project is error-prone, slow to validate, and easy to get dangerously wrong.
 ## Scope
 
 Build a **reusable media analysis library**, consumable from Python and Go projects. The
-library takes media in, runs WCAG-aligned flash detection, and returns a structured result.
+library takes media in, runs standards-based flash detection (WCAG 2.2 by default), and returns
+a structured result.
 
 In scope:
 - Local files (GIF, MP4, WebM, and other formats supported by the decoder)
 - Raw bytes / in-memory buffers
 - Caller-supplied decoded frames with explicit timestamps
-- Configurable thresholds and resource limits
-- Structured result with reasons and measurements
+- Standards profiles (WCAG, ISO, ITU-R, Ofcom, NHK/JBA Japan)
+- Display/viewing assumptions for area normalization
+- Configurable thresholds, color space, HDR/reference luminance, and resource limits
+- Structured result with reasons, measurements, working values, and assumptions
 - Thin CLI for manual checks and scripting
 - Example consumer showing how a moderation bot would use the library
 
@@ -27,6 +30,9 @@ Out of scope:
 - Persistent storage, caching services, hosted APIs
 - LLM/ML classification
 - Editing or transcoding media
+- Static bold-pattern analysis in v1 (separate detector later)
+- Display-induced flicker (CRT refresh, PWM backlights)
+- Real-time stream analysis or frame modification
 
 The original Discord bot is downgraded to a **reference consumer**. If one is built later, it
 lives in a separate repo or an `examples/` directory and depends on this library.
@@ -39,8 +45,10 @@ lives in a separate repo or an `examples/` directory and depends on this library
 - **Safe on untrusted input**: byte/duration/pixel caps, timeouts, no shell interpolation
 - **Portable**: Python package and Go module, no cgo required
 - **Stable API**: versioned result schema and semantic versioning
-- **Actionable**: report *why* content was flagged (flash rate, area, red flashes), not just a
-  boolean
+- **Actionable**: report *why* content was flagged (transition rate, area, red flashes), plus the
+  standards profile and assumptions used, not just a boolean
+- **Standards-explicit**: default to WCAG 2.2 SC 2.3.1; make profile/version/display assumptions
+  visible and never imply universal compliance
 
 ## Example use
 
@@ -74,4 +82,8 @@ if result.IsTriggering {
 
 - https://www.epilepsy.com/what-is-epilepsy/seizure-triggers/photosensitivity
 - https://en.wikipedia.org/wiki/Photosensitive_epilepsy
-- https://www.w3.org/TR/WCAG21/#seizures-and-physical-reactions
+- https://www.w3.org/TR/WCAG22/#seizures-and-physical-reactions
+- ISO 9241-391, ITU-R BT.1702 (2023), Ofcom PSE guidance (2017), NHK/JBA guidance (2020)
+- `planning/guidelines_photo_epilepsy.txt` - *International Guidelines for Photosensitive
+  Epilepsy: Gap Analysis and Recommendations* (DOI `10.1145/3694790`)
+- `planning/07_source_review.md` - how that paper changes this plan

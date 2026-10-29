@@ -1,7 +1,7 @@
 # Epilepsy Warning
 
 A fast, offline library for detecting photosensitive epilepsy triggers in GIFs and short
-videos. It implements WCAG 2.1 Success Criterion 2.3.1 (Three Flashes or Below Threshold) using
+videos. It implements WCAG 2.2 Success Criterion 2.3.1 (Three Flashes or Below Threshold) using
 rule-based luminance and red-flash analysis — no LLM, no network calls, no platform
 dependencies.
 
@@ -73,7 +73,7 @@ see `planning/03_tech_stack.md` and `planning/04_architecture.md` for the API sh
 
 ## How it works
 
-Based on WCAG 2.1 SC 2.3.1, content is flagged when it has:
+Based on WCAG 2.2 SC 2.3.1, content is flagged when it has:
 
 - more than 3 general flashes and/or more than 3 red flashes in any one-second period, or
 - flashes below that rate whose combined area exceeds the allowed portion of a 10-degree

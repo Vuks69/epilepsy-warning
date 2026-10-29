@@ -1,67 +1,85 @@
 # Implementation Plan
 
-Goal: ship a reusable, well-tested library (Python first, Go second) that classifies GIFs and
-short videos for photosensitive epilepsy triggers. The Discord bot is no longer a deliverable.
+Goal: ship a reusable, standards-explicit library (Python first, Go second) that classifies GIFs
+and short videos for photosensitive epilepsy triggers. The Discord bot is not a deliverable.
 
 ## Phase 0: Scope reset (done)
 - [x] Rewrite planning docs around a library, not a bot
-- [x] Move Discord concerns (intents, downloads, moderation actions) out of scope
-- [x] Define consumers and non-goals
-- [x] Confirm the rule-based WCAG approach
+- [x] Move Discord concerns out of scope
+- [x] Confirm the rule-based approach
+- [x] Add the international-guidelines gap analysis (`07_source_review.md`)
 
 ## Phase 1: Lock the contract
-- [ ] Finalize `AnalysisOptions` fields, defaults, and limits
-- [ ] Finalize the v1 result schema (classification, risk, reasons, measurements, metadata)
-- [ ] Define typed errors and the incomplete-scan behavior
-- [ ] Decide the public API surface for Python and Go
-- [ ] Write the cross-language conformance fixture format
-- [ ] Document supported formats and decoder requirements
+- [ ] Choose the default standard profile: **WCAG 2.2 SC 2.3.1** (ISO-harmonized red)
+- [ ] Define profile IDs and which profiles are fully/partially supported
+- [ ] Finalize `AnalysisOptions`: thresholds, working values, display geometry, limits
+- [ ] Finalize result schema v2: transitions, assumptions, profile, warnings
+- [ ] Define typed errors, `inconclusive`, and truncated-scan behavior
+- [ ] Define API surface for Python and Go
+- [ ] Define synthetic conformance fixture format (frames + exact timestamps)
+- [ ] Document supported formats, color spaces, and decoder requirements
 
-## Phase 2: Python reference library
-- [ ] Refactor the prototype out of `bot.py`-oriented code into a standalone package
+## Phase 2: Correctness-first Python engine
+- [ ] Refactor the prototype out of bot-oriented code into a standalone package
 - [ ] Remove `discord.py`, `PyNaCl`, `aiohttp`, `python-dotenv` from core dependencies
 - [ ] Implement path, bytes, and caller-supplied-frame entry points
 - [ ] Decode GIF with correct delays/disposal and loop wrap-around
-- [ ] Decode video via `imageio`/`imageio-ffmpeg` with real timestamps
-- [ ] Implement opposing-transition pairing (not frame-difference counting)
-- [ ] Implement sliding one-second windows using timestamps
-- [ ] Implement per-cell flashing-area estimation with a documented field approximation
-- [ ] Implement perceptual saturated-red detection
-- [ ] Add resource limits, timeouts, and typed errors
+- [ ] Decode video via `imageio`/`imageio-ffmpeg` with real presentation timestamps
+- [ ] Build per-tile luminance/color state tracking
+- [ ] Implement the **66 ms** qualifying-transition rule
+- [ ] Implement opposing-transition pairing and **6-transition / 1-second** counting
+- [ ] Implement saturated-red + CIE 1976 UCS difference (>= 0.2)
+- [ ] Implement **20 ms** same-direction area synchronization
+- [ ] Implement the 10-degree/416x416 CSS-px area model
+- [ ] Add display geometry options and explicit assumptions
+- [ ] Add a standards-profile layer (WCAG first; ISO/ITU/Ofcom/Japan stubs or partial)
+- [ ] Add resource limits, timeouts, typed errors, and warnings
 - [ ] Fill in the result model and version metadata
 - [ ] Add full type annotations and `py.typed`
-- [ ] Replace the current CLI with a thin wrapper over the library
+- [ ] Replace the CLI with a thin wrapper and add `--standard`/display flags
 
-## Phase 3: Python quality and packaging
-- [ ] Build the regression corpus: `4882.mp4`, `giphy/*.gif`, and negative fixtures
-- [ ] Add unit tests for luminance, pairing, windowing, area, red detection, and limits
-- [ ] Add golden/conformance tests with expected classifications
-- [ ] Add property tests for determinism, monotonic thresholds, and frame-rate invariance
-- [ ] Add benchmark/performance budget tests
-- [ ] Configure ruff, mypy, pytest, and coverage in CI
+## Phase 3: Python verification and packaging
+- [ ] Build synthetic timing fixtures for every boundary in `04_architecture.md`
+- [ ] Build negative fixtures (slow fades, small areas, pans, running feet, cuts)
+- [ ] Add unit tests for color, transitions, pairing, synchronization, windowing, area
+- [ ] Add golden media tests (`4882.mp4`, `giphy/*.gif`)
+- [ ] Add property tests for determinism, monotonicity, and frame-rate invariance
+- [ ] Add benchmarks at 24/30/60/120 fps and a performance budget
+- [ ] Configure ruff, mypy, pytest, coverage in CI
 - [ ] Publish to PyPI (`epilepsy-warning`) with docs and changelog
-- [ ] Document library usage (not bot usage) in the README
+- [ ] Rewrite README usage for the stable library API
 
-## Phase 4: Go port
-- [ ] Create the Go module with the same public API shape
-- [ ] Implement luminance, pairing, windowing, area, and red detection
+## Phase 4: Modern-content features (P1)
+- [ ] HDR/reference-luminance mode (PQ/HLG, 200 cd/m² default, theater 48 cd/m²)
+- [ ] Color-space metadata detection via ffprobe/ffmpeg; explicit warnings when missing
+- [ ] **65 Hz** fast-flash merge and mixed-rate guard
+- [ ] ISO/ITU-R/Ofcom profiles; Japan profile after that
+- [ ] Scene-change/inversion classification for broadcast profiles
+- [ ] Analyze at the largest expected display size; VR/FOV geometry support
+- [ ] Optional advisory `extended_exposure` (5+ s near-limit, no normative threshold)
+
+## Phase 5: Go port
+- [ ] Create the Go module with the same public API shape and schema v2
+- [ ] Port color math, transition state machine, pairing, synchronization, area model
 - [ ] Use stdlib GIF decoding; stream video frames from ffmpeg via `os/exec`
 - [ ] Support caller-supplied frames (`AnalyzeFrames`) and context cancellation
-- [ ] Run the same conformance fixtures and assert schema parity
-- [ ] Add benchmarks and a small usage example (`examples/`)
+- [ ] Run the same synthetic and media conformance fixtures
+- [ ] Add benchmarks and a usage example (`examples/`)
 - [ ] Publish a tagged module version
 
-## Phase 5: Release hardening
+## Phase 6: Research and release hardening (P2)
 - [ ] Fuzz decoders and API inputs
-- [ ] Verify behavior on malformed, truncated, oversized, and high-resolution media
-- [ ] Confirm no network access in the core path
+- [ ] Verify malformed, truncated, oversized, and high-resolution media
+- [ ] Prototype motion compensation; measure false-positive reduction on real pans/trains
+- [ ] Investigate static pattern analysis as a separate detector
+- [ ] Evaluate real-time/generated-content support
 - [ ] Document approximation limits and medical/safety disclaimers
 - [ ] Tag `v1.0.0` for Python and Go once results agree on the corpus
-- [ ] Add a sample consumer (optional): a Discord/Matrix bot in `examples/`, depending on the
-      library and owning all platform-specific logic
+- [ ] Add an optional sample consumer (Discord/Matrix) in `examples/`
 
 ## Immediate next steps
-1. Finalize the result schema and options (Phase 1) - everything else depends on it.
-2. Split the analyzer from the bot code and strip bot dependencies.
-3. Fix the two highest-risk correctness gaps: real timestamps and flash-pair detection.
-4. Build the golden fixture suite before starting the Go port.
+1. Finalize schema v2 and the standards-profile contract.
+2. Separate the analyzer from the bot and remove bot dependencies.
+3. Replace frame-difference counting with the 66 ms transition state machine.
+4. Implement the 6-transition limit and WCAG 2.2 red test.
+5. Build the synthetic fixture suite before touching the Go port.

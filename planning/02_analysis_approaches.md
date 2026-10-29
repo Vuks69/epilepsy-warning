@@ -1,34 +1,39 @@
 # Analysis Approaches for Detecting Photosensitive Triggers
 
 The detector must be fast, deterministic, offline, and implementable in both Python and Go.
-This document compares approaches independently of the original Discord bot.
+The approach must also be precise enough to defend a moderation/safety decision.
 
-## 1) Frame-difference / luminance threshold approach (recommended)
+## 1) Timed-transition analysis (recommended)
 
-This is the approach used by broadcast tooling such as Harding FPA and PEAT, and it maps
-directly to WCAG 2.3.1.
+This is the approach used by broadcast tooling such as HardingFPA and PEAT. It follows the
+standards' actual structure: transitions -> opposing pairs -> synchronized areas -> rate/area
+checks.
 
 Core idea:
-- Decode frames with timestamps (or use caller-supplied frames)
-- Compute relative luminance per pixel (sRGB, gamma-corrected)
-- Detect opposing luminance transitions that exceed the WCAG threshold
-- Pair up/down transitions into flash events
-- Track saturated-red transitions separately
-- Count flashes in sliding one-second windows using real timestamps
-- Estimate the flashing area and apply the area rule for low-rate flashes
+- Decode frames with per-frame timestamps (or accept caller-supplied frames)
+- Compute relative luminance and perceptual color per pixel or tile
+- Track state changes per tile over time, not just adjacent-frame differences
+- Form transitions that cross the critical luminance/color difference within 66 ms
+- Pair opposing transitions into flashes
+- Sum same-direction areas that occur within 20 ms
+- Count transitions in sliding 1-second windows
+- Evaluate the area rule for the active standards profile
+- Apply fast-flash merging for 65 Hz+ sequences
+- Return reasons, measurements, profile, and assumptions
 
 Pros:
-- Fast, deterministic, well-understood for this exact problem
-- Low compute cost; easy to implement in Python and Go
-- Matches the known triggers (full-screen color changes, flashlight effects)
-- Directly tunable to WCAG thresholds and explainable in a result
+- Matches the physical structure of WCAG/ISO/ITU/Ofcom/Japan rules
+- Deterministic, explainable, and cheap enough for interactive use
+- Handles multi-frame transitions and high-frame-rate content
+- Directly maps to a standards profile and conformance tests
 
 Cons:
-- Requires care: pairing transitions, timestamps, area approximation, red saturation
-- Depends on reliable frame decoding (GIF disposal modes, variable frame rate video)
-- Some complex patterns (localized flicker, camera motion, strobing text) are harder to model
+- More state to track than frame differencing (per-tile timestamps and area maps)
+- Sensitive to decode timing and color-space correctness
+- Motion, scene cuts, and camera pans can create false positives without compensation
+- Japan profile rules are substantially more complex
 
-This remains the correct starting point.
+This is the required v1 approach; the prototype's frame-difference heuristic is not sufficient.
 
 ## 2) Histogram/HSV change detection
 
@@ -40,55 +45,89 @@ Pros:
 - Robust to small spatial shifts
 
 Cons:
-- Does not identify opposing luminance pairs or area
+- Cannot identify opposing transitions, timing, or area
 - Higher false-positive rate on motion and scene cuts
-- Cannot produce WCAG-aligned evidence
+- Does not produce standards-aligned evidence
 
-Useful as a **pre-filter or signal**, not as the primary classifier.
+Use only as a coarse pre-filter, never as the classifier.
 
 ## 3) ML/classification
 
-- Train on known-bad examples (`giphy.lst`) and negatives
-- Use a small model for inference
+Rejected for v1. Labeled data is limited, decisions are opaque for a safety feature, inference is
+slower and harder to ship in two languages, and the thresholds are already specified by standards.
+Revisit only as an optional supplementary signal with a proper evaluation set.
 
-Pros:
-- Could learn patterns not captured by hand-written rules
+## Standards strategy
 
-Cons:
-- Limited labeled data; hard to prove coverage
-- Opaque decisions for a safety feature
-- Slower and more complex to ship in two languages
-- The physical thresholds are already specified by WCAG
+Implement one engine with a **standards profile**:
 
-Rejected for v1. Revisit only as an optional supplementary signal with a clear dataset and
-evaluation story.
+- `wcag22`: WCAG 2.2 SC 2.3.1, ISO-harmonized red (default)
+- `iso9241-391`: ISO profile, including the 65 Hz upper limit if applicable
+- `itu-r-bt1702` / `ofcom`: SDR/HDR thresholds, leading-edge pacing qualification
+- `nhk-jba`: Japan's area/contrast-dependent rates and scene-change rules
+- `custom`: explicit thresholds for research
 
-## Recommendation
+Keep the common engine; profiles alter thresholds, counting, and area assumptions. Do not claim
+cross-standard compliance.
 
-Implement **WCAG-aligned rule-based luminance/red flash detection** as the core, with a clean
-separation between decoding and analysis.
+## Required engine capabilities
 
-### Implementation details needed
+### Timing and transitions
 
-- **Frame timing**: per-frame timestamps/durations; never assume 30 fps
-- **Decoding**: GIF via the language's native decoder; video via ffmpeg streaming
-- **Frame input**: allow callers to supply frames to bypass decoders entirely
-- **Color**: convert to sRGB, composite alpha, compute luminance
-- **Downsampling**: retain enough resolution for area estimation; record the scale
-- **Transition pairing**: identify state changes and form opposing pairs
-- **Windowing**: sliding 1-second windows over timestamps
-- **Area**: per-cell changed-area map with a documented 10-degree-field approximation
-- **Red**: perceptual saturation test plus opposing transition
-- **Result**: classification, risk level, reasons, measurements, metadata
-- **Parity**: share fixtures and expected outputs between Python and Go
+- Per-frame timestamps/durations; never assume 30 fps.
+- Per-tile luminance/color state with the time the state began.
+- Transitions qualify only if the critical difference is reached within 66 ms.
+- Record transition start, direction, kind, duration, and area.
+- Handle variable frame rate and dropped/duplicated frames.
+
+### Area and synchronization
+
+- Per-tile changed-area map, not a whole-frame average.
+- Sum adjacent/nearby same-direction areas within 20 ms.
+- Normalize to a 10-degree field using CSS pixels (416 x 416 subareas by default) or known
+  display geometry.
+- Keep a broadcast `screen_fraction` model behind an explicit profile.
+
+### Luminance and color
+
+- sRGB relative luminance by default.
+- Explicit reference luminance and color space; HDR/PQ/HLG support in P1.
+- Saturated red via linear `R/(R+G+B) >= 0.8`.
+- Red difference via CIE 1976 UCS distance >= 0.2.
+- Count red and luminance transitions independently; one transition can be both.
+
+### High-frame-rate handling
+
+- Merge fast flashes whose leading edges are <= 15 ms apart.
+- Do not let mixed-rate bursts pass; check the 65 Hz rule over the actual sequence.
+- Add synthetic tests at 24, 30, 50, 60, and 120 fps.
+
+### Motion and scene changes
+
+- Classify inversions/scene changes for broadcast profiles.
+- Add optional motion compensation as an experimental pre-filter; collect false-positive
+  fixtures (pans, running feet, trains, shaking objects).
+- No public motion thresholds exist; do not make it a default.
+
+## Out of scope for v1
+
+- Static bold-pattern analysis (separate detector later)
+- Display-induced flicker (CRT/PWM/backlight)
+- Real-time stream analysis and frame modification/filtering
+- Medical diagnosis or individualized risk prediction
 
 ## Known gaps in the current prototype
 
-- Whole-frame average instead of a spatial area map
-- Assumed 30 fps instead of real timestamps
-- Counts frame differences rather than opposing flash pairs
-- Red heuristic is an RGB ratio, not perceptual saturation
-- No handling of GIF loop wrap-around
+- Counts frame differences as flashes (factor-of-two error against the 6-transition limit)
+- Assumes 30 fps instead of real timestamps
+- No 66 ms transition duration or per-tile state tracking
+- No 20 ms area synchronization
+- Whole-frame average instead of a 10-degree-field tile map
+- Red heuristic is an RGB ratio, missing the CIE 1976 UCS difference test
+- Uses old WCAG 2.1 framing without the 2023 harmonized red definition
+- No standards profiles, HDR/reference-luminance handling, or display assumptions
+- No GIF loop wrap-around
 - No typed errors or resource limits for untrusted input
 
-These are planned work items, not reasons to change the approach.
+These are tracked in `05_implementation_plan.md`; the source rationale is in
+`07_source_review.md`.

@@ -10,7 +10,8 @@ Build a **code library** that other Python and Go projects can embed to answer o
 
 The library should:
 - accept a local file, raw bytes, or caller-supplied frames
-- detect general luminance flashes and red flashes using WCAG 2.1 thresholds
+- detect general luminance flashes and red flashes using WCAG 2.2 SC 2.3.1 thresholds by default,
+  with optional ISO/ITU-R/Ofcom/Japan profiles
 - return a structured, stable result (classification, evidence, limits, version)
 - run offline and fast enough for interactive moderation/upload flows (seconds or faster)
 - avoid LLM/ML inference entirely
@@ -52,7 +53,8 @@ implementation first, followed by a native Go port validated against the same fi
 
 https://www.epilepsy.com/what-is-epilepsy/seizure-triggers/photosensitivity
 https://en.wikipedia.org/wiki/Photosensitive_epilepsy
-https://www.w3.org/TR/WCAG21/#seizures-and-physical-reactions
+https://www.w3.org/TR/WCAG22/#seizures-and-physical-reactions
+https://dl.acm.org/doi/10.1145/3694790
 
 ## Examples for testing
 
