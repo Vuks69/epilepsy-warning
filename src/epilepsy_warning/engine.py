@@ -237,8 +237,17 @@ class TransitionEngine:
         up_index = np.full(shape, -1, dtype=np.int16)
         down_index = np.full(shape, -1, dtype=np.int16)
 
+        # A hard cut sampled at a low frame rate has no start frame inside the
+        # 66 ms history cutoff.  Treat an immediate single-frame step as
+        # instantaneous when the sample interval itself exceeds the cutoff;
+        # the source transition cannot be resolved more finely than one frame.
+        # The duration is reported as 0 for these steps (see ``_record``).
+        step_index = count - 2
+        step_is_coarse = step_index >= 0 and times[step_index] < cutoff
+
         for index in range(count - 2, -1, -1):
-            if times[index] < cutoff:
+            is_coarse_step = index == step_index and step_is_coarse
+            if times[index] < cutoff and not is_coarse_step:
                 continue
             record = history[index]
             if index == 0:
@@ -282,15 +291,18 @@ class TransitionEngine:
         self._last_luminance_direction[choose_up] = 1
         self._last_luminance_direction[choose_down] = -1
 
+        instant_up = choose_up & (up_index == step_index) if step_is_coarse else None
+        instant_down = choose_down & (down_index == step_index) if step_is_coarse else None
+
         time_array = np.asarray(times, dtype=np.float64)
         if choose_up.any():
             starts = np.zeros(shape, dtype=np.float64)
             starts[choose_up] = time_array[up_index[choose_up]]
-            self._record(_LUMINANCE, 1, starts, choose_up, timestamp)
+            self._record(_LUMINANCE, 1, starts, choose_up, timestamp, instant=instant_up)
         if choose_down.any():
             starts = np.zeros(shape, dtype=np.float64)
             starts[choose_down] = time_array[down_index[choose_down]]
-            self._record(_LUMINANCE, -1, starts, choose_down, timestamp)
+            self._record(_LUMINANCE, -1, starts, choose_down, timestamp, instant=instant_down)
 
     def _luminance_pair_qualifies(self, low: np.ndarray, high: np.ndarray) -> np.ndarray:
         threshold = self.options.luminance_threshold
@@ -322,10 +334,18 @@ class TransitionEngine:
 
         best_distance = np.zeros(shape, dtype=np.float32)
         best_start = np.zeros(shape, dtype=np.float64)
+        best_index = np.full(shape, -1, dtype=np.int16)
         best_direction = np.zeros(shape, dtype=np.int8)
 
+        # Mirror the luminance step rule: a single coarse sample interval is
+        # treated as an instantaneous change because the 66 ms transition
+        # cannot be resolved at that frame rate.
+        step_index = count - 2
+        step_is_coarse = step_index >= 0 and times[step_index] < cutoff
+
         for index in range(count - 2, -1, -1):
-            if times[index] < cutoff:
+            is_coarse_step = index == step_index and step_is_coarse
+            if times[index] < cutoff and not is_coarse_step:
                 continue
             record = history[index]
             distance = ucs_distance_squared(record.u, record.v, now.u, now.v)
@@ -358,11 +378,13 @@ class TransitionEngine:
 
             best_distance[better] = distance[better]
             best_start[better] = times[index]
+            best_index[better] = index
             best_direction[better] = direction[better]
 
         allowed = (best_direction != 0) & (best_direction != self._last_red_direction)
         self._last_red_direction[allowed] = best_direction[allowed]
         if allowed.any():
+            instant = allowed & (best_index == step_index) if step_is_coarse else None
             self._record(
                 _RED,
                 None,
@@ -370,6 +392,7 @@ class TransitionEngine:
                 allowed,
                 timestamp,
                 directions=best_direction,
+                instant=instant,
             )
 
     def _record(
@@ -380,6 +403,7 @@ class TransitionEngine:
         mask: np.ndarray,
         timestamp: float,
         directions: Optional[np.ndarray] = None,
+        instant: Optional[np.ndarray] = None,
     ) -> None:
         if not mask.any():
             return
@@ -403,7 +427,11 @@ class TransitionEngine:
                     selected = base & (directions == event_direction)
                 if not selected.any():
                     continue
-                duration_ms = (timestamp - float(start)) * 1000.0
+                if instant is not None and bool(np.all(instant[selected])):
+                    # Unresolved single-frame step at a coarse sample rate.
+                    duration_ms = 0.0
+                else:
+                    duration_ms = (timestamp - float(start)) * 1000.0
                 key = (kind, event_direction, float(start))
                 bucket = self._buckets.get(key)
                 if bucket is None:

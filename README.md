@@ -132,7 +132,11 @@ include `--area-model`, `--max-flashes-per-second`, `--max-duration-seconds`, `-
 1. Frames are gamma-expanded from sRGB and reduced to a per-tile grid.
 2. A luminance transition is accepted only when the darker level is below 0.80 relative
    luminance, the difference reaches 0.10, and the change reaches the new level within 66 ms.
-   The local-extremum test rejects slow monotonic fades.
+   The local-extremum test rejects slow monotonic fades. When the sample interval itself is
+   longer than 66 ms, a single-frame step is treated as an unresolved hard cut: the source
+   cannot be sampled more finely, so the transition is kept and reported with
+   `duration_ms=0`. This avoids discarding hard cuts in low-frame-rate GIFs, but it can
+   over-count a real fade that happens to span one coarse sample interval.
 3. A saturated-red transition requires linear `R / (R + G + B) >= 0.8` and a CIE 1976 UCS
    chromaticity distance of at least 0.2.
 4. Same-direction areas are synchronized only when their leading edges are within 20 ms and
@@ -158,9 +162,19 @@ They are recorded in every result under `assumptions`.
 - Color management is assumed sRGB. HDR/PQ/HLG and embedded ICC profiles are not interpreted.
 - GIF transparency is composited over white and GIF disposal is applied explicitly. Other page
   backgrounds are not configurable; `transparency_composited_white` is reported when needed.
+- A looping GIF shorter than one second is analyzed across repeated cycles covering roughly one
+  second plus one cycle, because a single cycle cannot fill the one-second rate window. The
+  repeated frames are marked synthetic and `gif_loop_repeated_analysis` is reported; the
+  reported media duration remains the original clip length. Looping clips of one second or
+  more get a synthetic first frame at the loop seam (`gif_loop_wrap_analyzed`). The real viewer
+  may loop for a different length of time.
 - Motion compensation is not implemented, so large pans or cuts can look like luminance
   changes. Scene-change classification is not implemented for broadcast profiles. The
-  flash-area overlap guard is a heuristic for motion edges, not a motion detector.
+  flash-area overlap guard is a heuristic for motion edges, not a motion detector. It does not
+  separate every benign moving pattern from a real flash.
+- At sample rates below roughly 15 fps (intervals above 66 ms), transitions are treated as
+  instantaneous because their real duration is unobservable. This favors recall over a strict
+  duration measurement.
 - The 65 Hz merge cannot be observed faithfully in media sampled below that rate.
 - Default limits apply (`60 s`, `5000` frames, `64 MiB`, `60 s` wall time). Truncated analyses
   are marked `inconclusive` and warned about.

@@ -62,7 +62,10 @@ def write_transparent_gif(path):
         save_all=True,
         append_images=frames[1:],
         duration=[40, 40, 40],
-        loop=0,
+        # Use a finite loop count so this stays a compositing test.  With
+        # loop=0 the decoder repeats the short clip for a full analysis window,
+        # and the black/white cycle becomes a real flash.
+        loop=1,
         disposal=[2, 2, 2],
         optimize=False,
     )
@@ -81,7 +84,7 @@ class MediaTests(unittest.TestCase):
         self.assertEqual(result.media.format, "gif")
         self.assertEqual((result.media.width, result.media.height), (48, 48))
         self.assertGreaterEqual(result.measurements.frames_analyzed, 8)
-        self.assertIn("gif_loop_wrap_analyzed", result.warnings)
+        self.assertIn("gif_loop_repeated_analysis", result.warnings)
 
     def test_analyze_gif_bytes(self) -> None:
         with open(self.gif_path, "rb") as handle:

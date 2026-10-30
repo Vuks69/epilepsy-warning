@@ -66,14 +66,19 @@ class TransitionRateTests(unittest.TestCase):
         self.assertEqual(result.measurements.luminance_transitions, 2)
         self.assertAlmostEqual(result.measurements.max_transition_duration_ms, 60.0, places=3)
 
-    def test_seventy_millisecond_transition_is_rejected(self) -> None:
+    def test_unresolved_single_frame_step_is_instantaneous(self) -> None:
+        # A single-frame step sampled every 70 ms cannot resolve a transition
+        # shorter than the 66 ms cutoff.  The engine keeps the only evidence of
+        # a possible hard cut and reports it as instantaneous (duration 0)
+        # instead of discarding it.
         frames = [
             np.zeros((48, 48, 3), dtype=np.uint8),
             np.full((48, 48, 3), 255, dtype=np.uint8),
             np.zeros((48, 48, 3), dtype=np.uint8),
         ]
         result = analyze_frames(frames, [0.0, 0.07, 0.14], options=options())
-        self.assertEqual(result.measurements.luminance_transitions, 0)
+        self.assertEqual(result.measurements.luminance_transitions, 2)
+        self.assertAlmostEqual(result.measurements.max_transition_duration_ms, 0.0, places=3)
 
 
 class AreaTests(unittest.TestCase):

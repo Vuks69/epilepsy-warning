@@ -47,6 +47,11 @@ exceed the critical difference:
 
 The value is a working value, not a WCAG requirement. Keep it configurable and record it.
 
+Implementation note: when the source sample interval is longer than 66 ms, a single-frame step
+is treated as an unresolved hard cut and reported with `duration_ms=0`. The transition duration
+is not observable at that sample rate; discarding the step would miss hard cuts in low-frame-rate
+GIFs. This favors recall and must not be presented as a measured duration.
+
 ## Synchronization of areas (paper working value: 20 ms)
 
 When adjacent or nearby areas transition in the same direction within **20 ms**, sum them for the

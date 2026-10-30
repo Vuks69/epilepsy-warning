@@ -24,6 +24,8 @@ and short videos for photosensitive epilepsy triggers. The Discord bot is not a 
 - [x] Remove `discord.py`, `PyNaCl`, `aiohttp`, `python-dotenv` from core dependencies
 - [x] Implement path, bytes, and caller-supplied-frame entry points
 - [x] Decode GIF with correct delays/disposal and loop wrap-around
+  - short looping GIFs repeat enough cycles to cover the one-second window; longer clips get a
+    loop-seam frame; both are marked synthetic and warned about
 - [ ] Decode video via `imageio`/`imageio-ffmpeg` with real presentation timestamps
   - current: constant container frame rate, warned in results
 - [x] Build per-tile luminance/color state tracking
