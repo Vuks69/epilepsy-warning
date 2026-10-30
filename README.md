@@ -122,8 +122,17 @@ Exit codes:
 - `1`: triggering content found
 - `2`: error, invalid input, or inconclusive/truncated analysis
 
-`--json` emits one object for a single file and an array for multiple files. Other useful flags
-include `--area-model`, `--max-flashes-per-second`, `--max-duration-seconds`, `--max-frames`,
+By default each file gets one line: the verdict, the path, and the reasons when the media is
+flagged.
+
+```text
+TRIGGERING  examples/triggering/1.gif  (luminance_transition_rate_exceeded)
+Safe  examples/not-triggering/1.gif
+```
+
+`--verbose` adds the profile, rate/area/media measurements, and warnings. `--json` emits one
+object for a single file and an array for multiple files. Other useful flags include
+`--area-model`, `--max-flashes-per-second`, `--max-duration-seconds`, `--max-frames`,
 `--sample-fps`, `--strict-limits`, `--no-fast-flash-merge`, and `--extended-exposure`.
 `epilepsy-scan --help` lists the full set.
 

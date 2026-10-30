@@ -147,6 +147,29 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["path"], self.gif_path)
         self.assertEqual(payload["schema_version"], 2)
 
+    def test_default_output_is_one_line_with_reasons(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(["--area-model", "screen_fraction", self.gif_path])
+        self.assertEqual(code, 1)
+        lines = output.getvalue().strip().splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertIn("TRIGGERING", lines[0])
+        self.assertIn(self.gif_path, lines[0])
+        self.assertIn("luminance_transition_rate_exceeded", lines[0])
+        self.assertNotIn("rate:", lines[0])
+
+    def test_verbose_output_includes_measurements(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(["--verbose", "--area-model", "screen_fraction", self.gif_path])
+        self.assertEqual(code, 1)
+        text = output.getvalue()
+        self.assertGreater(len(text.strip().splitlines()), 1)
+        self.assertIn("rate:", text)
+        self.assertIn("media:", text)
+        self.assertIn("warnings:", text)
+
     def test_list_standards(self) -> None:
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

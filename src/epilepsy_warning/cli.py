@@ -38,6 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--json", action="store_true", help="emit JSON instead of text")
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="show measurements, media details, and warnings after the label",
+    )
+    parser.add_argument(
         "--screen-diagonal-in",
         type=float,
         metavar="INCHES",
@@ -141,14 +146,24 @@ def _options_from_args(args: argparse.Namespace) -> AnalysisOptions:
     return AnalysisOptions(**overrides)
 
 
-def _print_human(path: str, result: AnalysisResult) -> None:
-    label = {
+def _label(result: AnalysisResult) -> str:
+    return {
         "triggering": "TRIGGERING",
         "inconclusive": "INCONCLUSIVE",
     }.get(result.risk, "Safe")
+
+
+def _print_summary(path: str, result: AnalysisResult) -> None:
+    line = "%s  %s" % (_label(result), path)
+    if result.reasons:
+        line += "  (%s)" % ", ".join(result.reasons)
+    print(line)
+
+
+def _print_human(path: str, result: AnalysisResult) -> None:
     print(
         "%s  %s  (profile=%s, coverage=%s)"
-        % (label, path, result.standard.id, result.standard.profile_coverage)
+        % (_label(result), path, result.standard.id, result.standard.profile_coverage)
     )
 
     measurements = result.measurements
@@ -235,8 +250,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             payload = {"path": path}
             payload.update(result.to_dict())
             payloads.append(payload)
-        else:
+        elif args.verbose:
             _print_human(path, result)
+        else:
+            _print_summary(path, result)
 
         if result.is_triggering:
             statuses.append(1)
