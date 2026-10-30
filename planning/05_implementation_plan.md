@@ -75,7 +75,22 @@ and short videos for photosensitive epilepsy triggers. The Discord bot is not a 
 ## Phase 6: Research and release hardening (P2)
 - [ ] Fuzz decoders and API inputs
 - [ ] Verify malformed, truncated, oversized, and high-resolution media
-- [ ] Prototype motion compensation; measure false-positive reduction on real pans/trains
+- [ ] Prototype motion compensation (deferred; not a v1 blocker)
+  - Estimate global/local motion before the area test (e.g. block matching or phase
+    correlation), warp the previous tile field, and treat luminance/color changes explained by
+    the estimated motion as non-flash residuals. Keep the existing transition engine as the
+    source of truth; compensation is a pre-filter, not a replacement detector.
+  - Keep it opt-in (`motion_compensation=False` by default) and record the estimator, search
+    range, residual threshold, and any frames the warp could not explain in assumptions/warnings.
+  - Build a labelled motion fixture set (pans, trains, running feet, shaking objects, camera
+    shake) from both `examples/triggering` and `examples/not-triggering`; do not tune only on the
+    triggering list.
+  - Measure both false-positive reduction and recall loss. A useful prototype must reduce benign
+    motion flags without dropping real flashes; report the before/after matrix rather than a
+    single accuracy number.
+  - Do not make motion compensation a default or claim standards coverage until the public
+    thresholds and evaluation corpus are defensible. ITU-R/HardingFPA-style compensation has no
+    public normative thresholds.
 - [ ] Investigate static pattern analysis as a separate detector
 - [ ] Evaluate real-time/generated-content support
 - [ ] Document approximation limits and medical/safety disclaimers

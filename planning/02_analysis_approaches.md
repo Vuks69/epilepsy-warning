@@ -107,6 +107,13 @@ cross-standard compliance.
 - Classify inversions/scene changes for broadcast profiles.
 - Add optional motion compensation as an experimental pre-filter; collect false-positive
   fixtures (pans, running feet, trains, shaking objects).
+- Candidate approach: estimate a global translation (block matching or phase correlation), warp
+  the previous tile field, and require a transition to survive a residual test. Local/object
+  motion may need per-region estimates later; start with a single global estimate and record
+  when it fails.
+- Evaluate on both triggering and benign fixtures. Compensation that hides real flashes is worse
+  than the current overlap heuristic; keep the function opt-in and report the recall/precision
+  trade-off explicitly.
 - No public motion thresholds exist; do not make it a default.
 
 ## Out of scope for v1
