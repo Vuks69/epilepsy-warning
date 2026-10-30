@@ -259,9 +259,9 @@ reflected in `warnings`/`inconclusive`.
   - 65 Hz fast-flash and mixed-rate cases.
   - 20 cd/m² SDR and Michelson 1/17 HDR boundaries.
   - 416x416 CSS-px area boundary; legacy 25%-of-screen profile comparison.
-- Golden media tests on `examples/4882.mp4` and `examples/giphy/*.gif`.
-- Negative fixtures: static images, slow fades, small localized flashes, pans/running feet,
-  scene cuts, benign animation.
+- Golden media tests on `examples/triggering/4882.mp4` and `examples/triggering/*.gif`.
+- Negative fixtures under `examples/not-triggering/`: static images, slow fades, small localized
+  flashes, pans/running feet, scene cuts, benign animation, and GIF transparency/disposal.
 - Property tests: deterministic output, monotonic thresholds, frame-rate invariance.
 - Cross-language conformance: same fixtures and schema, with numeric tolerances.
 - Performance budget tests at 24/30/60/120 fps with a bounded tile grid.

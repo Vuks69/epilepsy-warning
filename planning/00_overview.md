@@ -74,9 +74,10 @@ if result.IsTriggering {
 
 ## Examples
 
-- `./examples/4882.mp4` - frames are uniform colors changing at random intervals (obviously flashing)
-- `./examples/giphy.lst` - direct GIF links considered seizure-inducing
-- `./examples/giphy/*.gif` - local copies used as regression fixtures
+- `./examples/triggering/4882.mp4` - frames are uniform colors changing at random intervals (obviously flashing)
+- `./examples/triggering.lst` - direct GIF links considered seizure-inducing
+- `./examples/triggering/*.gif` - local copies used as triggering regression fixtures
+- `./examples/not-triggering.lst` / `./examples/not-triggering/*.gif` - benign controls that must stay safe
 
 ## References
 

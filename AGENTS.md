@@ -2,34 +2,47 @@
 
 ## Project state
 
-- Target scope is a reusable Python/Go media-analysis library, documented in `README.md` and `planning/`. The implementation still contains the legacy Discord bot (`bot.py`) and a prototype analyzer.
-- `planning/01_wcag_flash_thresholds.md` is the standards contract: WCAG 2.2 default, profiles, thresholds, and working values. `planning/04_architecture.md` defines the intended API and schema v2; `planning/05_implementation_plan.md` tracks the refactor. Code lags all of them.
+- Target scope is a reusable Python/Go media-analysis library, documented in `README.md` and `planning/`. The Python library (`0.2.0`) and CLI are implemented; the Discord bot and prototype analyzer have been removed. The Go port is still planned.
+- `planning/01_wcag_flash_thresholds.md` is the standards contract: WCAG 2.2 default, profiles, thresholds, and working values. `planning/04_architecture.md` defines the intended API and schema v2; `planning/05_implementation_plan.md` tracks the refactor.
 - `planning/07_source_review.md` is the gap analysis from the scientific paper in `planning/guidelines_photo_epilepsy.txt`; read it before changing detector semantics.
-- `pyproject.toml` is stale scope-wise: its description and dependencies still describe the Discord bot. Do not treat it as the source of truth for project scope.
-- There is no CI and `tests/` is empty. Do not claim the test suite passes.
+- `pyproject.toml` describes the library, not the legacy bot. Core dependencies are `numpy`, `Pillow`, `imageio`, and `imageio-ffmpeg`.
+- There is no CI. `tests/` contains stdlib `unittest` tests; run them locally before claiming a change works.
 
 ## Setup and verification
 
-- Use the existing `.venv` (Python 3.14); the package is editable-installed. If dependencies or packaging change, run `.venv/bin/pip install -e .`.
-- `pyproject.toml` declares Python `>=3.9`; avoid 3.10+ syntax unless the floor is raised.
-- Verify detection with:
-  - `.venv/bin/epilepsy-scan examples/4882.mp4`
-  - `.venv/bin/epilepsy-scan examples/giphy/1.gif`
-- Both known fixtures must print `TRIGGERING`. `epilepsy-scan` exits `1` when media is flagged: that is success for these checks, not a command failure.
-- These are smoke tests only: they prove the prototype flags known-bad media, not that its transition counting, area model, or red detection follow the standards.
-- `ruff` is available but has no configured rule set; `ruff check .` currently reports pre-existing errors in the prototype. Lint/format only the files you touch: `.venv/bin/ruff format <paths>`.
+- Use the existing `.venv` (Python 3.14); the package is editable-installed. If dependencies or packaging change, run `uv pip install -e . --python .venv/bin/python` (the venv has no `pip`).
+- `pyproject.toml` declares Python `>=3.9`; avoid 3.10+ runtime syntax unless the floor is raised. The modules use `from __future__ import annotations`.
+- Run the unit tests:
+  - `.venv/bin/python -m unittest discover -s tests -v`
+- Verify known triggering media:
+  - `.venv/bin/epilepsy-scan examples/triggering/4882.mp4`
+  - `.venv/bin/epilepsy-scan examples/triggering/1.gif`
+- Both fixtures must print `TRIGGERING`. `epilepsy-scan` exits `1` when media is flagged: that is success for these checks, not a command failure. A full `4882.mp4` scan takes roughly 20 seconds with the default grid.
+- Check benign controls stay safe: `.venv/bin/epilepsy-scan examples/not-triggering/*.gif` (all must exit `0`).
+- These are smoke tests; the unit tests cover synthetic timing and area boundaries, but neither proves standards compliance.
+- `ruff` is configured in `pyproject.toml` (`E4`, `E7`, `E9`, `F`, `I`, `B` with `target-version = "py39"`). Run `.venv/bin/ruff check src/epilepsy_warning tests` and `.venv/bin/ruff format <paths>`.
+
+## Architecture
+
+- `api.py` contains the public entry points: `analyze_file`, `analyze_bytes`, and `analyze_frames`.
+- `engine.py` owns the transition state machine, synchronization, flash pairing, sliding-window counting, and fast-flash merge.
+- `decode.py` isolates format decoding; `area.py` owns tiling and area qualification; `color.py` owns sRGB/linear/CIE UCS math.
+- `standards.py` is the profile registry; `options.py` holds analysis and display assumptions; `result.py` is schema v2.
+- `cli.py` is a thin wrapper. Keep the core free of platform I/O, downloads, moderation actions, and temp-file side effects.
 
 ## Gotchas
 
-- `src/epilepsy_warning/__init__.py` is empty, so the README's `from epilepsy_warning import FlashDetector` fails. Import from `epilepsy_warning.analyzer` until public exports are added.
-- `FlashDetector.analyze(path)` returns a plain dict. It counts raw frame differences as flashes, assumes 30 fps, uses a whole-frame area average, and applies an RGB-ratio red heuristic. See `planning/02_analysis_approaches.md` and `planning/07_source_review.md`. Do not use it as a standards reference or claim WCAG/ISO compliance from its output.
-- Media files are gitignored (`*.mp4`, `*.gif`), and only `examples/giphy.lst` is tracked. `4882.mp4` and `examples/giphy/*.gif` exist locally only. Recreate them with `cd examples && ../util/download_gifs.sh giphy.lst` (uses `wget`, waits 5 seconds between downloads). Add media with `git add -f` only deliberately.
-- `util/run_bot.sh` is stale: it hardcodes an absolute path and points to the non-existent `src/bot.py`. Do not use it as the run command.
-- The `epilepsy-bot` entry point is legacy and requires `DISCORD_TOKEN`; the `.env.example` settings are bot-only. Keep new library code independent of env vars, network access, and Discord.
+- A triggering result is evidence that the configured working values were exceeded, not a compliance or medical determination. Keep `profile_coverage="partial"` for partially implemented profiles and keep the warning in results.
+- The WCAG area model assumes a 416 x 416 CSS-pixel 10-degree field and treats source pixels as CSS pixels when display geometry is unknown. Do not silently claim a more precise area calculation.
+- The analysis grid is capped by `AnalysisOptions.tile_grid_max` (default 192). Fine high-frequency patterns can be averaged away; the result always warns `tile_averaging_approximation`.
+- Opposing transitions are paired into flashes before the area test; area qualifies a flash for rate counting and is not an independent trigger. The changed area is the pair mask union, but the pair must also overlap (`flash_area_overlap_ratio`, default 0.30) unless the union is large (`flash_area_union_scale`, default 1.50). Those tolerances are heuristics, not normative thresholds.
+- GIF frames are composited over white; Pillow does not apply disposal when converting a single frame, so `decode.py` tracks disposal explicitly. Do not switch back to `image.convert("RGB")` per frame: transparent pixels become a dark palette color and fabricate full-screen flashes.
+- Video timestamps come from constant container frame rate, not per-frame presentation timestamps. Color management assumes sRGB; motion compensation and scene-change classification are not implemented.
+- Media files are gitignored (`*.mp4`, `*.gif`); only the two list files (`examples/triggering.lst`, `examples/not-triggering.lst`) are tracked. `4882.mp4` and the numbered GIFs exist locally only. Recreate them with `cd examples && ../util/download_gifs.sh triggering.lst` and `../util/download_gifs.sh not-triggering.lst` (uses `wget`, waits 5 seconds between downloads). Add media with `git add -f` only deliberately.
+- CLI exit codes are `0` safe, `1` triggering, and `2` error/inconclusive. Truncated analyses set `inconclusive=True` and warn.
 
 ## Conventions
 
-- Core analysis lives in `src/epilepsy_warning/analyzer.py`; `cli.py` is a thin wrapper. Keep the core free of platform I/O, downloads, moderation actions, and temp-file side effects.
 - Before changing detector thresholds or counting, read `planning/01_wcag_flash_thresholds.md` and `planning/07_source_review.md`. Default to WCAG 2.2; make profiles, display assumptions, and result schema explicit.
 - Keep normative thresholds separate from the paper's working values (66 ms transition, 20 ms synchronization, 65 Hz fast-flash). Record which assumptions a result used.
 - Stick to rule-based flash detection; LLM/ML and static-pattern analysis are explicitly out of scope for v1.

@@ -58,8 +58,10 @@ https://dl.acm.org/doi/10.1145/3694790
 
 ## Examples for testing
 
-- `./examples/4882.mp4` is a video where the frames are one uniform color, changing color and
-  brightness at random intervals.
-- `./examples/giphy.lst` is a collection of direct GIF links that are considered
+- `./examples/triggering/4882.mp4` is a video where the frames are one uniform color, changing
+  color and brightness at random intervals.
+- `./examples/triggering.lst` is a collection of direct GIF links that are considered
   seizure-inducing (they would be removed in a Discord server by a moderator).
-- `./examples/giphy/*.gif` are downloaded copies of those links for offline tests.
+- `./examples/triggering/*.gif` are downloaded copies of those links for offline tests.
+- `./examples/not-triggering.lst` and `./examples/not-triggering/*.gif` are benign controls
+  (motion, transparency, benign animation) that must not be flagged.
