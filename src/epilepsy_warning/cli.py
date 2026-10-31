@@ -89,7 +89,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--sample-fps",
         type=float,
         metavar="FPS",
-        help="decode video at this rate instead of the native frame rate",
+        help="decode video at this rate instead of the native frame rate (default: 15)",
+    )
+    parser.add_argument(
+        "--no-downsample",
+        action="store_true",
+        help="disable default 15 fps downsampling and analyze at native frame rate",
     )
     parser.add_argument(
         "--strict-limits",
@@ -129,6 +134,7 @@ def _options_from_args(args: argparse.Namespace) -> AnalysisOptions:
         "strict_limits": args.strict_limits,
         "enable_fast_flash_merge": not args.no_fast_flash_merge,
         "extended_exposure": args.extended_exposure,
+        "no_downsample": args.no_downsample,
     }
     if args.area_model is not None:
         overrides["area_model"] = args.area_model
@@ -142,6 +148,7 @@ def _options_from_args(args: argparse.Namespace) -> AnalysisOptions:
         overrides["max_frames"] = args.max_frames
     if args.sample_fps is not None:
         overrides["sample_fps"] = args.sample_fps
+        overrides["no_downsample"] = False
 
     return AnalysisOptions(**overrides)
 

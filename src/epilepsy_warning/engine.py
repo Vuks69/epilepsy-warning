@@ -14,6 +14,12 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+try:
+    from line_profiler import profile  # type: ignore
+except ImportError:
+    def profile(func):  # type: ignore
+        return func
+
 from .area import AreaEvaluation, AreaEvaluator
 from .color import (
     is_saturated_red,
@@ -117,6 +123,7 @@ class TransitionEngine:
         self._history: List[_HistoryRecord] = []
         self._buckets: Dict[Tuple[str, int, float], _Bucket] = {}
 
+    @profile
     def add_frame(self, timestamp: float, tiles_rgb: np.ndarray) -> None:
         linear = srgb_to_linear(tiles_rgb)
         luminance = linear_rgb_to_luminance(linear)
@@ -215,6 +222,7 @@ class TransitionEngine:
 
     # -- detection -----------------------------------------------------
 
+    @profile
     def _detect_luminance(self, timestamp: float, cutoff: float) -> None:
         history = self._history
         count = len(history)
@@ -324,6 +332,7 @@ class TransitionEngine:
         hdr = (low_cd >= darker_limit) & (michelson >= (1.0 / 17.0))
         return sdr | hdr
 
+    @profile
     def _detect_red(self, timestamp: float, cutoff: float) -> None:
         history = self._history
         count = len(history)
@@ -568,6 +577,7 @@ class TransitionEngine:
                 last_direction = event.direction
         return result
 
+    @profile
     def _qualify_by_flash_area(self, events: List[TransitionEvent]) -> List[TransitionEvent]:
         """Keep transitions whose opposing pair changes a qualifying area.
 
@@ -632,6 +642,7 @@ class TransitionEngine:
                 qualified.append(replace(event, area=area))
         return qualified
 
+    @profile
     def _merge_fast(self, events: List[TransitionEvent]) -> Tuple[List[TransitionEvent], int, int]:
         if not events:
             return [], 0, 0

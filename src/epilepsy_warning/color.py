@@ -9,6 +9,12 @@ from __future__ import annotations
 
 import numpy as np
 
+try:
+    from line_profiler import profile  # type: ignore
+except ImportError:
+    def profile(func):  # type: ignore
+        return func
+
 _SRGB_LINEAR_CUTOFF = 0.04045
 _SRGB_SLOPE = 12.92
 _SRGB_OFFSET = 0.055
@@ -16,6 +22,7 @@ _SRGB_SCALE = 1.055
 _SRGB_EXPONENT = 2.4
 
 
+@profile
 def srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
     """Gamma-expand sRGB channel values into linear light."""
     values = np.asarray(rgb, dtype=np.float32)
@@ -36,12 +43,14 @@ def linear_to_srgb(rgb: np.ndarray) -> np.ndarray:
     ).astype(np.float32)
 
 
+@profile
 def linear_rgb_to_luminance(linear_rgb: np.ndarray) -> np.ndarray:
     """Relative luminance (Y) of linear sRGB."""
     values = np.asarray(linear_rgb, dtype=np.float32)
     return 0.2126 * values[..., 0] + 0.7152 * values[..., 1] + 0.0722 * values[..., 2]
 
 
+@profile
 def linear_rgb_to_xyz(linear_rgb: np.ndarray) -> np.ndarray:
     """Convert linear sRGB to CIE XYZ (D65)."""
     values = np.asarray(linear_rgb, dtype=np.float32)
@@ -54,6 +63,7 @@ def linear_rgb_to_xyz(linear_rgb: np.ndarray) -> np.ndarray:
     return np.stack((x, y, z), axis=-1)
 
 
+@profile
 def linear_rgb_to_ucs(linear_rgb: np.ndarray) -> tuple:
     """Return CIE 1976 UCS chromaticity coordinates ``(u', v')``.
 
@@ -92,6 +102,7 @@ def red_ratio(linear_rgb: np.ndarray) -> np.ndarray:
     )
 
 
+@profile
 def is_saturated_red(linear_rgb: np.ndarray, threshold: float = 0.8) -> np.ndarray:
     return red_ratio(linear_rgb) >= threshold
 

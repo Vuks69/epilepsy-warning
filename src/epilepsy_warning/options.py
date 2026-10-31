@@ -73,12 +73,16 @@ class AnalysisOptions:
     max_frames: int = 5000
     max_pixels: int = 1920 * 1080
     analysis_timeout_seconds: float = 60.0
-    sample_fps: Optional[float] = None
+    sample_fps: Optional[float] = 15.0
+    no_downsample: bool = False
     tile_grid_max: int = 192
     strict_limits: bool = False
 
     def __post_init__(self) -> None:
         get_profile(self.standard)
+
+        if self.no_downsample:
+            object.__setattr__(self, "sample_fps", None)
 
         if not 0.0 < self.luminance_threshold <= 1.0:
             raise InvalidOptionsError("luminance_threshold must be in (0, 1]")
@@ -176,6 +180,7 @@ class AnalysisOptions:
             "max_pixels": self.max_pixels,
             "analysis_timeout_seconds": self.analysis_timeout_seconds,
             "sample_fps": self.sample_fps,
+            "no_downsample": self.no_downsample,
             "tile_grid_max": self.tile_grid_max,
             "strict_limits": self.strict_limits,
         }

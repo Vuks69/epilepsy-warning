@@ -16,6 +16,12 @@ from typing import Tuple
 import numpy as np
 from PIL import Image
 
+try:
+    from line_profiler import profile  # type: ignore
+except ImportError:
+    def profile(func):  # type: ignore
+        return func
+
 from .options import AnalysisOptions, DisplayGeometry
 
 _FIELD_OF_VIEW_DEGREES = 10.0
@@ -62,6 +68,7 @@ class TileGrid:
         }
 
 
+@profile
 def tile_frame(frame: np.ndarray, grid: TileGrid) -> np.ndarray:
     """Downsample an RGB(A) frame to the tile grid.
 
@@ -203,6 +210,7 @@ class AreaEvaluator:
     def uses_assumed_display(self) -> bool:
         return self.area_model == "wcag_solid_angle" and self.options.display is None
 
+    @profile
     def evaluate(self, mask: np.ndarray) -> AreaEvaluation:
         mask = np.asarray(mask, dtype=bool)
         if mask.shape != (self.grid.rows, self.grid.cols):

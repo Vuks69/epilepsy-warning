@@ -11,5 +11,9 @@ venv/
 tmp/
 .DS_Store
 
+# examples
 *.mp4
 *.gif
+
+# profiling
+*.lprof
