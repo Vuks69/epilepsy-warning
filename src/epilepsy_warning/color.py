@@ -21,11 +21,29 @@ _SRGB_OFFSET = 0.055
 _SRGB_SCALE = 1.055
 _SRGB_EXPONENT = 2.4
 
+# Precompute sRGB -> linear LUT for uint8 values (much faster than pow)
+def _build_srgb_to_linear_lut() -> np.ndarray:
+    lut = np.empty(256, dtype=np.float32)
+    for i in range(256):
+        v = i / 255.0
+        if v <= _SRGB_LINEAR_CUTOFF:
+            lut[i] = v / _SRGB_SLOPE
+        else:
+            lut[i] = ((v + _SRGB_OFFSET) / _SRGB_SCALE) ** _SRGB_EXPONENT
+    return lut
+
+
+_SRGB_TO_LINEAR_LUT = _build_srgb_to_linear_lut()
+
 
 @profile
 def srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
     """Gamma-expand sRGB channel values into linear light."""
-    values = np.asarray(rgb, dtype=np.float32)
+    values = np.asarray(rgb)
+    if values.dtype == np.uint8:
+        # Fast path using LUT
+        return _SRGB_TO_LINEAR_LUT[values].astype(np.float32, copy=False)
+    values = values.astype(np.float32)
     return np.where(
         values <= _SRGB_LINEAR_CUTOFF,
         values / _SRGB_SLOPE,
