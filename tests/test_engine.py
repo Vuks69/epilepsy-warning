@@ -196,6 +196,84 @@ class FlashAreaMotionTests(unittest.TestCase):
         self.assertEqual(len(self.engine._qualify_by_flash_area(events)), 2)
 
 
+class SourceScaledAreaTests(unittest.TestCase):
+    """A source smaller than the nominal field lowers the area threshold.
+
+    The lower threshold alone would admit moving patterns, so flashes that
+    only reach it must show stronger region evidence.
+    """
+
+    SIZE = 48
+
+    def setUp(self) -> None:
+        settings = options(area_model="wcag_solid_angle")
+        self.grid = TileGrid.for_size(self.SIZE, self.SIZE, settings.tile_grid_max)
+        self.area = AreaEvaluator(self.grid, settings, "wcag_solid_angle")
+        self.engine = TransitionEngine(settings, settings.resolved_profile(), self.area)
+        self.assertEqual(self.grid.cols, self.SIZE)
+        self.assertEqual(self.grid.rows, self.SIZE)
+
+    def mask(self, start: int, stop: int) -> np.ndarray:
+        mask = np.zeros((self.grid.rows, self.grid.cols), dtype=bool)
+        mask.ravel()[start:stop] = True
+        return mask
+
+    def event(self, direction: int, mask: np.ndarray, timestamp: float) -> TransitionEvent:
+        return TransitionEvent(
+            kind="luminance",
+            direction=direction,
+            start_time=timestamp,
+            duration_ms=40.0,
+            mask=mask,
+            area=self.area.evaluate(mask),
+        )
+
+    def pair(self, first: np.ndarray, second: np.ndarray):
+        return self.engine._qualify_by_flash_area(
+            [self.event(1, first, 0.0), self.event(-1, second, 0.04)]
+        )
+
+    def test_small_source_clamps_field_and_threshold(self) -> None:
+        self.assertTrue(self.area.source_scaled)
+        self.assertAlmostEqual(self.area.field_width_px, 48.0)
+        self.assertAlmostEqual(self.area.field_height_px, 48.0)
+        self.assertAlmostEqual(self.area.base_threshold_px2, 43264.0)
+        self.assertAlmostEqual(self.area.threshold_px2, 576.0)
+
+    def test_large_source_keeps_the_nominal_threshold(self) -> None:
+        grid = TileGrid.for_size(500, 500, 64)
+        area = AreaEvaluator(grid, options(area_model="wcag_solid_angle"), "wcag_solid_angle")
+        self.assertFalse(area.source_scaled)
+        self.assertAlmostEqual(area.threshold_px2, 43264.0)
+
+    def test_disjoint_small_area_is_rejected(self) -> None:
+        # Union is 1000 px2 (> 576 threshold) but below the base threshold,
+        # with no overlap and only 43% frame coverage.
+        self.assertEqual(self.pair(self.mask(0, 500), self.mask(700, 1200)), [])
+
+    def test_weak_overlap_in_scaled_regime_is_rejected(self) -> None:
+        # 35% overlap would pass the base 30% guard but not the 40% guard.
+        self.assertEqual(self.pair(self.mask(0, 650), self.mask(300, 1000)), [])
+
+    def test_strong_overlap_in_scaled_regime_is_accepted(self) -> None:
+        self.assertEqual(len(self.pair(self.mask(0, 720), self.mask(280, 1000))), 2)
+
+    def test_near_full_frame_disjoint_flash_is_accepted(self) -> None:
+        # Motion fragments the overlap, but the pair covers most of the frame.
+        self.assertEqual(len(self.pair(self.mask(0, 900), self.mask(900, 1800))), 2)
+
+    def test_scaled_source_is_reported(self) -> None:
+        result = analyze_frames(
+            *uniform_sequence(8),
+            options=options(area_model="wcag_solid_angle"),
+        )
+        payload = result.to_dict()
+        self.assertTrue(payload["assumptions"]["area_source_scaled"])
+        self.assertAlmostEqual(payload["assumptions"]["area_base_threshold_px2"], 43264.0)
+        self.assertAlmostEqual(payload["assumptions"]["field_width_px"], 48.0)
+        self.assertIn("area_threshold_scaled_to_source", payload["warnings"])
+
+
 class ResultSchemaTests(unittest.TestCase):
     def test_result_contains_assumptions_and_provenance(self) -> None:
         result = analyze_frames(*uniform_sequence(8), options=options())

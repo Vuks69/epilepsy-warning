@@ -147,6 +147,17 @@ options; otherwise use the 416 x 416 CSS-px default and mark the result as using
 geometry. Center-weighted risk is noted in the literature but has no normative threshold; do not
 invent one.
 
+When display geometry is unknown and the source is smaller than 416 CSS px in either dimension,
+clamp the assumed 10-degree field to the source size. The threshold becomes **25% of that
+clamped field** (`area_source_scaled: true`, `area_threshold_scaled_to_source`), while
+`area_base_threshold_px2` records the unclamped 416 x 416 value. This is an explicit assumption
+that the content can fill at least that part of the field, not a measured geometry. Because the
+lower threshold also admits moving patterns, a pair below the base threshold must show stronger
+region evidence: overlap of at least `flash_area_scaled_overlap_ratio` (working value 0.40) or
+frame coverage of at least `flash_area_frame_fraction` (working value 0.50). Pairs at or above
+the base threshold keep the normal overlap guard (0.30) and large-area escape (1.5x). These two
+values are implementation heuristics, not normative thresholds.
+
 ## Scene changes and inversions
 
 ISO/ITU/Ofcom treat inversions and scene changes as flashes; NHK/JBA applies stricter rules
@@ -183,6 +194,11 @@ should document that it does not.
 | `fast_flash_hz` | `65` (merge at <=15 ms) | ISO + paper |
 | `area_model` | `wcag_solid_angle` | normative |
 | `area_subarea_css_px` | `416 x 416` | paper working normalization |
+| `area_base_threshold_px2` | `0.25 x 416 x 416` | derived from the normalization |
+| `flash_area_overlap_ratio` | `0.3` | implementation heuristic |
+| `flash_area_union_scale` | `1.5` | implementation heuristic |
+| `flash_area_scaled_overlap_ratio` | `0.4` | implementation heuristic (small sources) |
+| `flash_area_frame_fraction` | `0.5` | implementation heuristic (small sources) |
 | `reference_luminance` | `200 cd/m²` | standard assumption |
 | `extended_exposure` | off | advisory only |
 | `motion_compensation` | off | experimental |

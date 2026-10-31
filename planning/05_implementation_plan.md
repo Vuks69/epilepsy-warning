@@ -34,6 +34,8 @@ and short videos for photosensitive epilepsy triggers. The Discord bot is not a 
 - [x] Implement saturated-red + CIE 1976 UCS difference (>= 0.2)
 - [x] Implement **20 ms** same-direction area synchronization
 - [x] Implement the 10-degree/416x416 CSS-px area model
+  - small unknown-display sources clamp the assumed field to the source and use stronger
+    overlap/frame-coverage guards below the base threshold (heuristic, recorded in assumptions)
 - [x] Add display geometry options and explicit assumptions
 - [x] Add a standards-profile layer (WCAG first; ISO/ITU/Ofcom/Japan stubs or partial)
 - [x] Add resource limits, timeouts, typed errors, and warnings

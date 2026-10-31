@@ -59,6 +59,8 @@ class AnalysisOptions:
     enable_fast_flash_merge: bool = True
     flash_area_overlap_ratio: float = 0.30
     flash_area_union_scale: float = 1.50
+    flash_area_scaled_overlap_ratio: float = 0.40
+    flash_area_frame_fraction: float = 0.50
     area_model: Optional[str] = None
     area_subarea_css_px: Tuple[int, int] = (416, 416)
     display: Optional[DisplayGeometry] = None
@@ -96,6 +98,10 @@ class AnalysisOptions:
             raise InvalidOptionsError("flash_area_overlap_ratio must be in [0, 1]")
         if self.flash_area_union_scale < 1.0:
             raise InvalidOptionsError("flash_area_union_scale must be at least 1.0")
+        if not 0.0 <= self.flash_area_scaled_overlap_ratio <= 1.0:
+            raise InvalidOptionsError("flash_area_scaled_overlap_ratio must be in [0, 1]")
+        if not 0.0 < self.flash_area_frame_fraction <= 1.0:
+            raise InvalidOptionsError("flash_area_frame_fraction must be in (0, 1]")
         if self.reference_luminance_cd_m2 <= 0:
             raise InvalidOptionsError("reference_luminance_cd_m2 must be positive")
         if self.color_space.lower() not in ("auto", "srgb"):
@@ -155,6 +161,8 @@ class AnalysisOptions:
             "enable_fast_flash_merge": self.enable_fast_flash_merge,
             "flash_area_overlap_ratio": self.flash_area_overlap_ratio,
             "flash_area_union_scale": self.flash_area_union_scale,
+            "flash_area_scaled_overlap_ratio": self.flash_area_scaled_overlap_ratio,
+            "flash_area_frame_fraction": self.flash_area_frame_fraction,
             "area_model": self.area_model,
             "area_subarea_css_px": list(self.area_subarea_css_px),
             "display": self.display.to_dict() if self.display else None,

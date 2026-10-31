@@ -92,6 +92,15 @@ field and the result carries `display_assumed: true` plus an
 `area_normalized_to_416_css_px` warning. Source pixels are treated as CSS pixels; that is an
 explicit approximation.
 
+When the source is smaller than 416 CSS px in either dimension, the assumed field is clamped to
+the source and the area threshold is reduced accordingly (`area_threshold_scaled_to_source`).
+This assumes the content can fill at least that part of a 10-degree field. To keep small moving
+patterns from counting as flashes, a pair that only reaches this reduced threshold must either
+overlap by `flash_area_scaled_overlap_ratio` (default 0.40) or cover at least
+`flash_area_frame_fraction` (default 0.50) of the frame. Pairs at or above the full
+`area_base_threshold_px2` keep the normal overlap and large-area guards. These values are
+heuristics for unknown display geometry, not standards thresholds.
+
 ### Standards profiles
 
 | ID | Coverage | Notes |
@@ -153,7 +162,10 @@ object for a single file and an array for multiple files. Other useful flags inc
 5. Simultaneous up/down inversions count as one state change. Opposing transitions within one
    second are paired into flashes; the area test uses the pair's changed-area union, but the
    two masks must overlap or the union must be large enough to avoid counting unrelated motion
-   edges (`flash_area_overlap_ratio`, `flash_area_union_scale`).
+   edges (`flash_area_overlap_ratio`, `flash_area_union_scale`). When the source is smaller
+   than the nominal 416 x 416 field, a pair below `area_base_threshold_px2` needs stronger
+   overlap or at least half-frame coverage (`flash_area_scaled_overlap_ratio`,
+   `flash_area_frame_fraction`).
 6. More than six area-qualified alternating transitions in any one-second window (more than
    three flashes) is triggering. Runs at or above 65 Hz are merged to two transitions.
 7. Area qualifies a flash for rate counting; it is not a separate trigger. The area test uses
@@ -181,6 +193,9 @@ They are recorded in every result under `assumptions`.
   changes. Scene-change classification is not implemented for broadcast profiles. The
   flash-area overlap guard is a heuristic for motion edges, not a motion detector. It does not
   separate every benign moving pattern from a real flash.
+- For sources smaller than the nominal 416 x 416 field, the reduced area threshold is an
+  assumption about display size. It improves recall for small GIFs but can admit small moving
+  patterns; the stronger overlap/frame-coverage guards mitigate this without proving safety.
 - At sample rates below roughly 15 fps (intervals above 66 ms), transitions are treated as
   instantaneous because their real duration is unobservable. This favors recall over a strict
   duration measurement.

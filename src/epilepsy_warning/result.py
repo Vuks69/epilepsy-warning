@@ -83,6 +83,8 @@ class Assumptions:
     fast_flash_merge_enabled: bool
     flash_area_overlap_ratio: float
     flash_area_union_scale: float
+    flash_area_scaled_overlap_ratio: float
+    flash_area_frame_fraction: float
     max_flashes_per_second: float
     max_transitions_per_second: int
     area_model: str
@@ -92,6 +94,8 @@ class Assumptions:
     tile_grid: Dict[str, Any]
     field_width_px: float
     field_height_px: float
+    area_base_threshold_px2: float
+    area_source_scaled: bool
 
     def to_dict(self) -> dict:
         return {
@@ -104,6 +108,8 @@ class Assumptions:
             "fast_flash_merge_enabled": self.fast_flash_merge_enabled,
             "flash_area_overlap_ratio": self.flash_area_overlap_ratio,
             "flash_area_union_scale": self.flash_area_union_scale,
+            "flash_area_scaled_overlap_ratio": self.flash_area_scaled_overlap_ratio,
+            "flash_area_frame_fraction": self.flash_area_frame_fraction,
             "max_flashes_per_second": self.max_flashes_per_second,
             "max_transitions_per_second": self.max_transitions_per_second,
             "area_model": self.area_model,
@@ -113,6 +119,8 @@ class Assumptions:
             "tile_grid": self.tile_grid,
             "field_width_px": round(self.field_width_px, 3),
             "field_height_px": round(self.field_height_px, 3),
+            "area_base_threshold_px2": round(self.area_base_threshold_px2, 3),
+            "area_source_scaled": self.area_source_scaled,
         }
 
 

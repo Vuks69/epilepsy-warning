@@ -173,6 +173,8 @@ def _build_result(
         warnings.append("profile_coverage_%s" % profile.coverage)
     if area.uses_assumed_display:
         warnings.append("area_normalized_to_416_css_px")
+    if area.source_scaled:
+        warnings.append("area_threshold_scaled_to_source")
     if options.display is not None and area_model == "wcag_solid_angle":
         warnings.append("display_geometry_caller_supplied")
     if options.sample_fps is not None:
@@ -220,6 +222,8 @@ def _build_result(
         fast_flash_merge_enabled=options.enable_fast_flash_merge,
         flash_area_overlap_ratio=options.flash_area_overlap_ratio,
         flash_area_union_scale=options.flash_area_union_scale,
+        flash_area_scaled_overlap_ratio=options.flash_area_scaled_overlap_ratio,
+        flash_area_frame_fraction=options.flash_area_frame_fraction,
         max_flashes_per_second=options.max_flashes_per_second,
         max_transitions_per_second=options.max_transitions_per_second,
         area_model=area_model,
@@ -229,6 +233,8 @@ def _build_result(
         tile_grid=grid.to_dict(),
         field_width_px=area.field_width_px,
         field_height_px=area.field_height_px,
+        area_base_threshold_px2=area.base_threshold_px2,
+        area_source_scaled=area.source_scaled,
     )
 
     media = MediaInfo(

@@ -128,10 +128,31 @@ class AreaEvaluator:
         self.grid = grid
         self.options = options
         self.area_model = area_model
-        self.field_width_px, self.field_height_px = self._compute_field_size()
+        nominal_width, nominal_height = self._compute_field_size()
+
+        # With no display geometry the nominal 416 x 416 CSS-px field is an
+        # upper bound on the content's assumed viewing size.  If the source
+        # is smaller in either dimension, assume it can fill at least the
+        # corresponding part of a 10-degree field; the effective field is then
+        # clamped to the source.  This is an explicit display-size assumption,
+        # not a measured geometry, and it only lowers the area threshold for
+        # sources smaller than the nominal field.
+        if area_model == "wcag_solid_angle" and options.display is None:
+            self.field_width_px = min(nominal_width, float(grid.width))
+            self.field_height_px = min(nominal_height, float(grid.height))
+            self.source_scaled = (
+                self.field_width_px < nominal_width or self.field_height_px < nominal_height
+            )
+        else:
+            self.field_width_px = nominal_width
+            self.field_height_px = nominal_height
+            self.source_scaled = False
+
         if area_model == "screen_fraction":
-            self.threshold_px2 = 0.25 * grid.width * grid.height
+            self.base_threshold_px2 = 0.25 * grid.width * grid.height
+            self.threshold_px2 = self.base_threshold_px2
         elif area_model == "wcag_solid_angle":
+            self.base_threshold_px2 = 0.25 * nominal_width * nominal_height
             self.threshold_px2 = 0.25 * self.field_width_px * self.field_height_px
         else:
             raise ValueError("unknown area model %r" % area_model)
@@ -219,7 +240,9 @@ class AreaEvaluator:
             "area_model": self.area_model,
             "field_width_px": round(self.field_width_px, 3),
             "field_height_px": round(self.field_height_px, 3),
+            "base_threshold_px2": round(self.base_threshold_px2, 3),
             "threshold_px2": round(self.threshold_px2, 3),
+            "source_scaled": self.source_scaled,
             "window_tiles": [self._window_cols, self._window_rows],
             "display_assumed": self.uses_assumed_display,
             "tile_grid": self.grid.to_dict(),

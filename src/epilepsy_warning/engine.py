@@ -577,12 +577,21 @@ class TransitionEngine:
         places.  The overlap ratio is measured in raw tile counts so it does
         not depend on the area model.  Texture and dithering fragment the
         overlap, so a pair whose changed area is well beyond the threshold is
-        still accepted.  Both tolerances are implementation choices, not
-        normative thresholds, and are recorded with the result.
+        still accepted.
+
+        When the source is smaller than the nominal 416 x 416 CSS-pixel field,
+        the area threshold is clamped to the source size.  A flash that only
+        reaches that lower threshold is held to stronger region evidence: it
+        must overlap more, or cover at least half of the frame.  This keeps
+        moving patterns from counting as flashes just because the source is
+        small.  These tolerances are implementation choices, not normative
+        thresholds, and are recorded with the result.
         """
         if not events:
             return []
 
+        base_threshold = self.area.base_threshold_px2
+        scaled_regime = self.area.source_scaled
         flash_area: List[Optional[AreaEvaluation]] = [None] * len(events)
         for index in range(1, len(events)):
             previous = events[index - 1]
@@ -596,11 +605,21 @@ class TransitionEngine:
             changed_tiles = float(np.count_nonzero(previous.mask | current.mask))
             overlap_tiles = float(np.count_nonzero(previous.mask & current.mask))
             overlap_ratio = overlap_tiles / changed_tiles if changed_tiles else 0.0
-            large = changed.area_px2 >= (
-                self.options.flash_area_union_scale * self.area.threshold_px2
-            )
-            if overlap_ratio < self.options.flash_area_overlap_ratio and not large:
-                continue
+
+            if scaled_regime and changed.area_px2 < base_threshold:
+                small_area = (
+                    overlap_ratio < self.options.flash_area_scaled_overlap_ratio
+                    and changed.screen_fraction < self.options.flash_area_frame_fraction
+                )
+                if small_area:
+                    continue
+            else:
+                reference_threshold = base_threshold if scaled_regime else self.area.threshold_px2
+                large = changed.area_px2 >= (
+                    self.options.flash_area_union_scale * reference_threshold
+                )
+                if overlap_ratio < self.options.flash_area_overlap_ratio and not large:
+                    continue
 
             for position in (index - 1, index):
                 existing = flash_area[position]

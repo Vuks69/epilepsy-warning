@@ -171,6 +171,8 @@ Proposed cross-language shape (schema v2):
     "fast_flash_hz": 65,
     "area_model": "wcag_solid_angle",
     "area_subarea_css_px": [416, 416],
+    "area_base_threshold_px2": 43264,
+    "area_source_scaled": false,
     "display_assumed": true
   },
   "media": {
@@ -212,6 +214,10 @@ AnalysisOptions(
     fast_flash_hz=65,                   # merge <= 15 ms leading edges
     area_model="wcag_solid_angle",      # or "screen_fraction" for broadcast profiles
     area_subarea_css_px=(416, 416),
+    flash_area_overlap_ratio=0.30,      # implementation heuristic
+    flash_area_union_scale=1.50,        # implementation heuristic
+    flash_area_scaled_overlap_ratio=0.40,  # small sources below the base threshold
+    flash_area_frame_fraction=0.50,     # small sources below the base threshold
     display=None,                       # DisplayGeometry(...)
     reference_luminance_cd_m2=200,
     color_space="auto",
