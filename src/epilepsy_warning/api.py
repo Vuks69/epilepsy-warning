@@ -14,7 +14,7 @@ from typing import Any, Iterable, List, Optional, Sequence
 import numpy as np
 
 from ._version import __version__
-from .area import AreaEvaluator, TileGrid, tile_frame
+from .area import AreaEvaluator, TileGrid, tile_frame_uint8
 from .decode import (
     DecodeState,
     FrameRecord,
@@ -133,7 +133,7 @@ def _run(
             engine = TransitionEngine(options, profile, area)
 
         assert engine is not None and grid is not None
-        engine.add_frame(record.timestamp, tile_frame(frame, grid))
+        engine.add_frame(record.timestamp, tile_frame_uint8(frame, grid))
         frames += 1
 
     if engine is None or area is None or grid is None:

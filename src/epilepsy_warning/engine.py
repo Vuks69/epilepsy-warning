@@ -17,15 +17,14 @@ import numpy as np
 try:
     from line_profiler import profile  # type: ignore
 except ImportError:
+
     def profile(func):  # type: ignore
         return func
 
+
 from .area import AreaEvaluation, AreaEvaluator
 from .color import (
-    is_saturated_red,
-    linear_rgb_to_luminance,
-    linear_rgb_to_ucs,
-    red_ratio,
+    linear_rgb_features,
     srgb_to_linear,
     ucs_distance_squared,
 )
@@ -126,13 +125,11 @@ class TransitionEngine:
     @profile
     def add_frame(self, timestamp: float, tiles_rgb: np.ndarray) -> None:
         linear = srgb_to_linear(tiles_rgb)
-        luminance = linear_rgb_to_luminance(linear)
-        redness = red_ratio(linear)
-        u, v = linear_rgb_to_ucs(linear)
+        luminance, redness, red, u, v = linear_rgb_features(linear, self.options.red_saturation)
         record = _HistoryRecord(
             timestamp=float(timestamp),
             luminance=luminance,
-            red=is_saturated_red(linear, self.options.red_saturation),
+            red=red,
             redness=redness,
             u=u,
             v=v,

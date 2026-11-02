@@ -8,6 +8,7 @@ import numpy as np
 
 from epilepsy_warning.color import (
     is_saturated_red,
+    linear_rgb_features,
     linear_rgb_to_luminance,
     linear_rgb_to_ucs,
     linear_to_srgb,
@@ -58,6 +59,26 @@ class ColorTests(unittest.TestCase):
         u, v = linear_rgb_to_ucs(black)
         self.assertEqual(float(u[0, 0]), 0.0)
         self.assertEqual(float(v[0, 0]), 0.0)
+
+    def test_fused_features_match_individual_helpers(self) -> None:
+        rng = np.random.default_rng(4)
+        linear = rng.random((7, 9, 3), dtype=np.float32)
+
+        luminance, redness, red, u, v = linear_rgb_features(linear, 0.8)
+        u_expected, v_expected = linear_rgb_to_ucs(linear)
+
+        np.testing.assert_array_equal(luminance, linear_rgb_to_luminance(linear))
+        np.testing.assert_array_equal(redness, red_ratio(linear))
+        np.testing.assert_array_equal(red, is_saturated_red(linear, 0.8))
+        np.testing.assert_array_equal(u, u_expected)
+        np.testing.assert_array_equal(v, v_expected)
+
+    def test_uint8_lut_matches_float_conversion(self) -> None:
+        values = np.arange(256, dtype=np.uint8)
+        np.testing.assert_array_equal(
+            srgb_to_linear(values),
+            srgb_to_linear(values.astype(np.float32) / np.float32(255.0)),
+        )
 
 
 if __name__ == "__main__":

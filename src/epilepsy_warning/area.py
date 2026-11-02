@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Tuple
 
 import numpy as np
@@ -19,12 +20,145 @@ from PIL import Image
 try:
     from line_profiler import profile  # type: ignore
 except ImportError:
+
     def profile(func):  # type: ignore
         return func
+
 
 from .options import AnalysisOptions, DisplayGeometry
 
 _FIELD_OF_VIEW_DEGREES = 10.0
+
+# Pillow's BOX resampling filter, reproduced exactly in numpy.  It uses 22 bits
+# of fixed-point precision for the normalized coefficients (see Resample.c).
+_BOX_PRECISION_BITS = 22
+_BOX_ROUNDING = 1 << (_BOX_PRECISION_BITS - 1)
+# 255 * in_size must stay inside int32 for the cumulative sums.
+_BOX_INT32_AXIS_LIMIT = (2**31 - 1) // 255
+
+
+@dataclass(frozen=True)
+class _BoxCoefficients:
+    starts: np.ndarray
+    counts: np.ndarray
+    weights: np.ndarray
+
+
+@lru_cache(maxsize=64)
+def _box_coefficients(in_size: int, out_size: int) -> _BoxCoefficients:
+    """Return Pillow-compatible BOX filter coefficients for one axis.
+
+    Pillow's BOX filter has support 0.5 (scaled up when shrinking).  Every
+    source pixel whose centre falls inside that support contributes equally, so
+    each output is a simple average over a contiguous run of source pixels.
+    The fixed-point weight is the same value Pillow normalizes to, which keeps
+    the numpy result bit-for-bit equal to ``Image.resize(..., BOX)``.
+    """
+    scale = in_size / float(out_size)
+    filterscale = max(scale, 1.0)
+    support = 0.5 * filterscale
+    inverse_filterscale = 1.0 / filterscale
+
+    starts = []
+    counts = []
+    weights = []
+    for out_index in range(out_size):
+        center = (out_index + 0.5) * scale
+        xmin = int(center - support + 0.5)
+        if xmin < 0:
+            xmin = 0
+        xmax = int(center + support + 0.5)
+        if xmax > in_size:
+            xmax = in_size
+        xmax -= xmin
+
+        run_start = None
+        run_end = None
+        run_weight = 0.0
+        total_weight = 0.0
+        for offset in range(xmax):
+            position = (offset + xmin - center + 0.5) * inverse_filterscale
+            weight = 1.0 if -0.5 < position <= 0.5 else 0.0
+            if weight:
+                if run_start is None:
+                    run_start = offset
+                run_end = offset + 1
+                run_weight = weight
+                total_weight += weight
+
+        if run_start is None or total_weight == 0.0:
+            raise ValueError("BOX filter produced an empty source window")
+        starts.append(xmin + run_start)
+        counts.append(run_end - run_start)
+        weights.append(int(0.5 + (run_weight / total_weight) * (1 << _BOX_PRECISION_BITS)))
+
+    starts_array = np.asarray(starts, dtype=np.intp)
+    counts_array = np.asarray(counts, dtype=np.intp)
+    weights_array = np.asarray(weights, dtype=np.int64)
+    for array in (starts_array, counts_array, weights_array):
+        array.flags.writeable = False
+    return _BoxCoefficients(starts_array, counts_array, weights_array)
+
+
+def _box_downsample_axis(array: np.ndarray, axis: int, in_size: int, out_size: int) -> np.ndarray:
+    """Box-filter one axis, matching Pillow's 8-bit integer arithmetic."""
+    coefficients = _box_coefficients(in_size, out_size)
+    dtype = np.int32 if in_size <= _BOX_INT32_AXIS_LIMIT else np.int64
+
+    prefix_shape = list(array.shape)
+    prefix_shape[axis] += 1
+    prefix = np.empty(prefix_shape, dtype=dtype)
+    if axis == 1:
+        prefix[:, 0, :] = 0
+        np.cumsum(array, axis=1, dtype=dtype, out=prefix[:, 1:, :])
+        sums = (
+            prefix[:, coefficients.starts + coefficients.counts, :]
+            - prefix[:, coefficients.starts, :]
+        )
+        weight_shape = (1, out_size, 1)
+    else:
+        prefix[0, :, :] = 0
+        np.cumsum(array, axis=0, dtype=dtype, out=prefix[1:, :, :])
+        sums = (
+            prefix[coefficients.starts + coefficients.counts, :, :]
+            - prefix[coefficients.starts, :, :]
+        )
+        weight_shape = (out_size, 1, 1)
+
+    sums *= coefficients.weights.reshape(weight_shape)
+    sums += _BOX_ROUNDING
+    sums >>= _BOX_PRECISION_BITS
+    np.clip(sums, 0, 255, out=sums)
+    return sums.astype(np.uint8)
+
+
+def _box_downsample(array: np.ndarray, rows: int, cols: int) -> np.ndarray:
+    height, width = array.shape[:2]
+    # Match Pillow's pass order (Resample.c): run the vertical pass first only
+    # when the height is being reduced much more aggressively than the width.
+    horizontal_first = not ((height - rows) > 0 and (height - rows) > (width - cols) * 2)
+    if horizontal_first:
+        if width != cols:
+            array = _box_downsample_axis(array, 1, width, cols)
+        if height != rows:
+            array = _box_downsample_axis(array, 0, height, rows)
+    else:
+        if height != rows:
+            array = _box_downsample_axis(array, 0, height, rows)
+        if width != cols:
+            array = _box_downsample_axis(array, 1, width, cols)
+    return array
+
+
+def _composite_rgba_over_black(rgba: np.ndarray) -> np.ndarray:
+    alpha = rgba[..., 3]
+    if not alpha.any():
+        return np.zeros((rgba.shape[0], rgba.shape[1], 3), dtype=np.uint8)
+    if np.all(alpha == 255):
+        return np.ascontiguousarray(rgba[..., :3])
+    values = rgba[..., :3].astype(np.uint16)
+    alpha16 = alpha.astype(np.uint16)[..., None]
+    return ((values * alpha16 + 127) // 255).astype(np.uint8)
 
 
 @dataclass(frozen=True)
@@ -69,12 +203,11 @@ class TileGrid:
 
 
 @profile
-def tile_frame(frame: np.ndarray, grid: TileGrid) -> np.ndarray:
-    """Downsample an RGB(A) frame to the tile grid.
+def tile_frame_uint8(frame: np.ndarray, grid: TileGrid) -> np.ndarray:
+    """Downsample an RGB(A) frame to the tile grid as uint8 tile averages.
 
-    Returns a float32 array in the range 0..1 with shape ``(rows, cols, 3)``.
-    Tile colors are box-filtered sRGB averages before gamma expansion; that is
-    an explicit approximation and is reported in the result warnings.
+    This is the internal, allocation-light form.  Public callers should use
+    :func:`tile_frame`, which returns normalized float32 values.
     """
     array = np.asarray(frame)
     if array.ndim == 2:
@@ -87,27 +220,37 @@ def tile_frame(frame: np.ndarray, grid: TileGrid) -> np.ndarray:
     elif array.dtype != np.uint8:
         array = np.clip(array, 0, 255).astype(np.uint8)
 
-    array = np.ascontiguousarray(array)
-    if array.shape[2] == 3 and (grid.rows, grid.cols) == array.shape[:2]:
-        # The grid is already at source resolution (small inputs).  A BOX
-        # resize to the same size is a copy, so skip the PIL round trip.
-        output = array.astype(np.float32)
-        output /= 255.0
-        return output
-
     if array.shape[2] == 4:
-        rgba = Image.fromarray(array, mode="RGBA")
-        background = Image.new("RGB", rgba.size, (0, 0, 0))
-        background.paste(rgba, mask=rgba.getchannel("A"))
-        image = background
+        array = _composite_rgba_over_black(array)
     else:
-        image = Image.fromarray(array, mode="RGB")
+        array = np.ascontiguousarray(array)
 
-    resized = image.resize((grid.cols, grid.rows), Image.Resampling.BOX)
-    # Convert in place: an out-of-place division would allocate a second
-    # float32 array for every frame.  In-place division keeps the values
-    # bit-for-bit identical to the previous implementation.
-    output = np.asarray(resized, dtype=np.float32)
+    if (grid.rows, grid.cols) == array.shape[:2]:
+        # The grid is already at source resolution (small inputs).
+        return array
+
+    # Pillow's C BOX filter is substantially faster than the numpy fallback
+    # for real downscales (roughly 5-8x on GIF-sized frames), so use it for
+    # the normal path.  The numpy implementation stays as a fallback for
+    # platforms where Pillow's resampler is unavailable or rejects the image.
+    try:
+        image = Image.fromarray(array, mode="RGB")
+        resized = image.resize((grid.cols, grid.rows), Image.Resampling.BOX)
+    except (ValueError, OSError):
+        return _box_downsample(array, grid.rows, grid.cols)
+    return np.asarray(resized, dtype=np.uint8)
+
+
+@profile
+def tile_frame(frame: np.ndarray, grid: TileGrid) -> np.ndarray:
+    """Downsample an RGB(A) frame to the tile grid.
+
+    Returns a float32 array in the range 0..1 with shape ``(rows, cols, 3)``.
+    Tile colors are box-filtered sRGB averages before gamma expansion; that is
+    an explicit approximation and is reported in the result warnings.
+    """
+    output = tile_frame_uint8(frame, grid).astype(np.float32)
+    # Convert in place to avoid allocating a second float32 array per frame.
     output /= 255.0
     return output
 

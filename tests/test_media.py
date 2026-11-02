@@ -20,7 +20,7 @@ from epilepsy_warning import (
     analyze_file,
 )
 from epilepsy_warning.cli import main
-from epilepsy_warning.decode import decode_file
+from epilepsy_warning.decode import _alpha_composite_rgba, decode_file
 
 
 def options(**overrides):
@@ -94,6 +94,32 @@ def write_disposal_previous_gif(path):
         disposal=[1, 3, 1],
         optimize=False,
     )
+
+
+class AlphaCompositeTests(unittest.TestCase):
+    def test_numpy_compositing_matches_pillow(self) -> None:
+        rng = np.random.default_rng(5)
+        for _ in range(20):
+            height, width = (int(value) for value in rng.integers(1, 8, 2))
+            destination = rng.integers(0, 256, (height, width, 4), dtype=np.uint8)
+            source = rng.integers(0, 256, (height, width, 4), dtype=np.uint8)
+            expected = np.asarray(
+                Image.alpha_composite(
+                    Image.fromarray(destination, mode="RGBA"),
+                    Image.fromarray(source, mode="RGBA"),
+                )
+            )
+            np.testing.assert_array_equal(_alpha_composite_rgba(destination, source), expected)
+
+    def test_opaque_and_transparent_sources_take_cheap_paths(self) -> None:
+        destination = np.full((2, 2, 4), 7, dtype=np.uint8)
+        opaque = np.full((2, 2, 4), 9, dtype=np.uint8)
+        opaque[..., 3] = 255
+        transparent = np.zeros((2, 2, 4), dtype=np.uint8)
+        transparent[..., :3] = 200
+
+        self.assertIs(_alpha_composite_rgba(destination, opaque), opaque)
+        self.assertIs(_alpha_composite_rgba(destination, transparent), destination)
 
 
 class MediaTests(unittest.TestCase):

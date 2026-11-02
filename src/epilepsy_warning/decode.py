@@ -161,6 +161,51 @@ def _check_pixels(frame: np.ndarray, options: AnalysisOptions) -> None:
         )
 
 
+def _alpha_composite_rgba(dst: np.ndarray, src: np.ndarray) -> np.ndarray:
+    """Composite an RGBA source over an RGBA destination.
+
+    This is the integer alpha-compositing formula Pillow uses, vectorized in
+    numpy so the decoder does not churn through PIL image objects for every
+    frame.  Fully transparent and fully opaque sources take cheap paths.  The
+    inputs are never mutated; the returned array may alias either input.
+    """
+    source_alpha = src[..., 3]
+    if not source_alpha.any():
+        return dst
+    if np.all(source_alpha == 255):
+        return src
+
+    destination = dst.astype(np.int32)
+    source = src.astype(np.int32)
+    source_alpha = source[..., 3]
+    destination_alpha = destination[..., 3]
+
+    blend = destination_alpha * (255 - source_alpha)
+    output_alpha_255 = source_alpha * 255 + blend
+    coefficient_1 = np.zeros_like(output_alpha_255)
+    np.floor_divide(
+        source_alpha * 255 * 255 * (1 << 7),
+        output_alpha_255,
+        out=coefficient_1,
+        where=source_alpha > 0,
+    )
+    coefficient_2 = 255 * (1 << 7) - coefficient_1
+
+    output = np.empty_like(destination)
+    for channel in range(3):
+        value = source[..., channel] * coefficient_1 + destination[..., channel] * (coefficient_2)
+        value += 0x80 << 7
+        # SHIFTFORDIV255(value) >> 7, matching Pillow's AlphaComposite.c.
+        output[..., channel] = (((value >> 8) + value) >> 8) >> 7
+    value = output_alpha_255 + 0x80
+    output[..., 3] = ((value >> 8) + value) >> 8
+
+    transparent = source_alpha == 0
+    if transparent.any():
+        output[transparent] = destination[transparent]
+    return output.astype(np.uint8)
+
+
 def _pillow_frames(
     source: Any, fmt: str, options: AnalysisOptions, state: DecodeState
 ) -> Iterator[FrameRecord]:
@@ -202,16 +247,15 @@ def _pillow_frames(
             timestamp = 0.0
             first_frame: Optional[np.ndarray] = None
             last_end = 0.0
-            blank = Image.new("RGBA", image.size, (255, 255, 255, 255))
+            blank = np.full((image.size[1], image.size[0], 4), 255, dtype=np.uint8)
 
             frame_limit_hit = False
             pending_limit_warning: Optional[str] = None
             cycle = 0
             while cycle < cycles:
                 # Each loop starts from a fresh canvas; GIF disposal does not
-                # carry across the loop seam.  ``blank`` is never mutated
-                # (``alpha_composite`` returns a new image), so it can be used
-                # directly without a defensive copy.
+                # carry across the loop seam.  ``blank`` is never mutated, so
+                # it can be used directly without a defensive copy.
                 canvas = blank
                 for index in range(min(frame_count, usable_count)):
                     if timestamp >= options.max_duration_seconds:
@@ -250,20 +294,21 @@ def _pillow_frames(
                         delay = durations[index]
                     disposal = int(getattr(image, "disposal_method", 0) or 0)
                     # Disposal 3 restores the canvas as it was before this
-                    # frame.  ``alpha_composite`` does not mutate its inputs,
-                    # so keeping a reference is enough; no copy is needed.
+                    # frame.  The compositing helpers never mutate their
+                    # inputs, so keeping a reference is enough; no copy needed.
                     previous_canvas = canvas if disposal == 3 else None
-                    canvas = Image.alpha_composite(canvas, image.convert("RGBA"))
-                    frame = np.asarray(canvas.convert("RGB"))
+                    source = np.asarray(image.convert("RGBA"))
+                    canvas = _alpha_composite_rgba(canvas, source)
+                    frame = canvas[..., :3]
                     if disposal == 2:
                         canvas = blank
                     elif previous_canvas is not None:
                         canvas = previous_canvas
                     _check_pixels(frame, options)
                     if cycle == 0 and index == 0:
-                        # ``convert`` produced a new image, and the resulting
-                        # array owns its data, so retaining it does not alias
-                        # the canvas used for later frames.
+                        # The canvas is replaced rather than mutated on every
+                        # frame, so retaining this view does not alias a later
+                        # canvas.
                         first_frame = frame
 
                     yield FrameRecord(frame, timestamp, delay, synthetic=cycle > 0)

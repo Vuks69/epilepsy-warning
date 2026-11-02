@@ -63,6 +63,12 @@ Based on line_profiler/cProfile on video; for GIFs focus shifts:
 2. **Fuse color transforms** in engine to cut passes.
 3. **Optimize canvas compositing** - use numpy arrays where feasible.
 
+Status: implemented in 0.2.x.
+1. `area.py` has an exact numpy BOX implementation (Pillow-compatible fixed-point coefficients, prefix-sum axis passes) but it is used as a fallback, not the normal path: benchmarking showed Pillow's C resize is roughly 5-8x faster for real downscales inside this pipeline. `tile_frame_uint8` exposes the uint8 tile averages without a float round-trip; `tile_frame` remains the public float wrapper.
+2. `color.py` exposes `linear_rgb_features`, which computes luminance, redness, the saturated-red mask, and CIE UCS in one pass; `engine.py` uses it. The sRGB LUT now matches the float32 path exactly.
+3. `decode.py` keeps an RGBA numpy canvas and vectorizes Pillow's `AlphaComposite.c` integer formula. Opaque and fully transparent sources take cheap paths; disposal semantics are unchanged.
+   Results matched the captured baseline for the benchmark set; GIF timings improved modestly. No detector semantics, warnings, assumptions, or the `tile_grid_max` default changed.
+
 ### Phase 3: Algorithmic (careful testing)
 1. **Incremental suffix arrays** in engine
 2. **Engine short-circuiting**

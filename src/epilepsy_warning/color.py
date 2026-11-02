@@ -12,8 +12,10 @@ import numpy as np
 try:
     from line_profiler import profile  # type: ignore
 except ImportError:
+
     def profile(func):  # type: ignore
         return func
+
 
 _SRGB_LINEAR_CUTOFF = 0.04045
 _SRGB_SLOPE = 12.92
@@ -21,16 +23,19 @@ _SRGB_OFFSET = 0.055
 _SRGB_SCALE = 1.055
 _SRGB_EXPONENT = 2.4
 
-# Precompute sRGB -> linear LUT for uint8 values (much faster than pow)
+
+# Precompute sRGB -> linear LUT for uint8 values (much faster than pow).  The
+# entries are evaluated with the same float32 operations as the non-LUT path,
+# so ``srgb_to_linear`` gives identical values for a uint8 value and for the
+# corresponding ``value / 255`` float.
 def _build_srgb_to_linear_lut() -> np.ndarray:
-    lut = np.empty(256, dtype=np.float32)
-    for i in range(256):
-        v = i / 255.0
-        if v <= _SRGB_LINEAR_CUTOFF:
-            lut[i] = v / _SRGB_SLOPE
-        else:
-            lut[i] = ((v + _SRGB_OFFSET) / _SRGB_SCALE) ** _SRGB_EXPONENT
-    return lut
+    values = np.arange(256, dtype=np.uint8).astype(np.float32)
+    values /= np.float32(255.0)
+    return np.where(
+        values <= _SRGB_LINEAR_CUTOFF,
+        values / _SRGB_SLOPE,
+        ((values + _SRGB_OFFSET) / _SRGB_SCALE) ** _SRGB_EXPONENT,
+    ).astype(np.float32)
 
 
 _SRGB_TO_LINEAR_LUT = _build_srgb_to_linear_lut()
@@ -96,6 +101,42 @@ def linear_rgb_to_ucs(linear_rgb: np.ndarray) -> tuple:
     u = np.divide(4.0 * x, denominator, out=np.zeros_like(x), where=denominator > 0)
     v = np.divide(9.0 * y, denominator, out=np.zeros_like(y), where=denominator > 0)
     return u, v
+
+
+@profile
+def linear_rgb_features(linear_rgb: np.ndarray, red_threshold: float = 0.8) -> tuple:
+    """Compute the per-tile color quantities used by the engine in one pass.
+
+    Returns ``(luminance, redness, red, u, v)``.  This is the fused equivalent
+    of calling ``linear_rgb_to_luminance``, ``red_ratio``,
+    ``is_saturated_red``, and ``linear_rgb_to_ucs``.  The red ratio is computed
+    once and reused for the saturation mask instead of being recomputed, and
+    the CIE UCS pair is derived without materializing the intermediate XYZ
+    stack.
+    """
+    values = np.asarray(linear_rgb, dtype=np.float32)
+    red = values[..., 0]
+    green = values[..., 1]
+    blue = values[..., 2]
+
+    luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+    total = red + green + blue
+    redness = np.divide(
+        red,
+        total,
+        out=np.zeros_like(red),
+        where=total > 0,
+    )
+
+    x = 0.4124564 * red + 0.3575761 * green + 0.1804375 * blue
+    y = 0.2126729 * red + 0.7151522 * green + 0.0721750 * blue
+    z = 0.0193339 * red + 0.1191920 * green + 0.9503041 * blue
+    denominator = x + 15.0 * y + 3.0 * z
+    u = np.divide(4.0 * x, denominator, out=np.zeros_like(x), where=denominator > 0)
+    v = np.divide(9.0 * y, denominator, out=np.zeros_like(y), where=denominator > 0)
+
+    return luminance, redness, redness >= red_threshold, u, v
 
 
 def ucs_distance_squared(
