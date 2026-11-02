@@ -88,6 +88,13 @@ def tile_frame(frame: np.ndarray, grid: TileGrid) -> np.ndarray:
         array = np.clip(array, 0, 255).astype(np.uint8)
 
     array = np.ascontiguousarray(array)
+    if array.shape[2] == 3 and (grid.rows, grid.cols) == array.shape[:2]:
+        # The grid is already at source resolution (small inputs).  A BOX
+        # resize to the same size is a copy, so skip the PIL round trip.
+        output = array.astype(np.float32)
+        output /= 255.0
+        return output
+
     if array.shape[2] == 4:
         rgba = Image.fromarray(array, mode="RGBA")
         background = Image.new("RGB", rgba.size, (0, 0, 0))
@@ -97,7 +104,12 @@ def tile_frame(frame: np.ndarray, grid: TileGrid) -> np.ndarray:
         image = Image.fromarray(array, mode="RGB")
 
     resized = image.resize((grid.cols, grid.rows), Image.Resampling.BOX)
-    return np.asarray(resized, dtype=np.float32) / 255.0
+    # Convert in place: an out-of-place division would allocate a second
+    # float32 array for every frame.  In-place division keeps the values
+    # bit-for-bit identical to the previous implementation.
+    output = np.asarray(resized, dtype=np.float32)
+    output /= 255.0
+    return output
 
 
 @dataclass(frozen=True)

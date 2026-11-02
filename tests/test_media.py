@@ -71,6 +71,31 @@ def write_transparent_gif(path):
     )
 
 
+def write_disposal_previous_gif(path):
+    """Frame 1 must be undone before frame 2 (disposal method 3)."""
+    black = Image.new("RGBA", (48, 48), (0, 0, 0, 255))
+
+    white_patch = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+    for y in range(18, 30):
+        for x in range(18, 30):
+            white_patch.putpixel((x, y), (255, 255, 255, 255))
+
+    red_patch = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+    for y in range(6, 18):
+        for x in range(6, 18):
+            red_patch.putpixel((x, y), (255, 0, 0, 255))
+
+    black.save(
+        path,
+        save_all=True,
+        append_images=[white_patch, red_patch],
+        duration=[40, 40, 40],
+        loop=1,
+        disposal=[1, 3, 1],
+        optimize=False,
+    )
+
+
 class MediaTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -108,6 +133,21 @@ class MediaTests(unittest.TestCase):
         result = analyze_file(path, options())
         self.assertFalse(result.is_triggering)
         self.assertIn("transparency_composited_white", result.warnings)
+
+    def test_disposal_previous_restores_the_canvas(self) -> None:
+        path = os.path.join(self.temporary.name, "disposal-previous.gif")
+        write_disposal_previous_gif(path)
+
+        records, _ = decode_file(path, options())
+        frames = [np.asarray(record.data) for record in records]
+        self.assertEqual(len(frames), 3)
+
+        # Frame 1 paints a white patch, then disposal 3 restores the black
+        # canvas before frame 2.  The old patch location must be black again.
+        self.assertTrue(np.all(frames[1][24, 24] > 245))
+        self.assertTrue(np.all(frames[2][24, 24] < 10))
+        self.assertGreater(int(frames[2][12, 12, 0]), 200)
+        self.assertTrue(np.all(frames[2][12, 12, 1:] < 10))
 
     def test_static_image_is_safe(self) -> None:
         path = os.path.join(self.temporary.name, "still.png")

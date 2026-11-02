@@ -185,43 +185,19 @@ def _pillow_frames(
 
             durations: List[float] = []
             delay_assumed = False
-            for index in range(usable_count):
-                image.seek(index)
-                delay = float(image.info.get("duration", 0) or 0) / 1000.0
-                if delay <= 0:
-                    delay = 0.1
-                    delay_assumed = True
-                durations.append(delay)
-            if delay_assumed:
-                state.add_warning("gif_delay_assumed")
-
-            if has_transparency:
-                # GIF/PNG transparency has no inherent background.  Composite
-                # onto white, the usual page background, so transparent areas
-                # do not become opaque black.  Disposal is applied explicitly
-                # because Pillow does not composite it into convert("RGBA").
-                state.add_warning("transparency_composited_white")
-
-            total_duration = sum(durations)
 
             # Browsers repeat looping GIFs indefinitely.  A clip shorter than
             # one second cannot contain a one-second flash window, so analyze
             # enough cycles to cover a full window plus one loop.  The reported
             # media duration stays the length of the clip itself.
+            #
+            # Durations are read during the first decode pass.  Only short
+            # looping clips need extra passes, so ordinary GIFs avoid the
+            # former full extra seek/decode used solely to collect delays.
             repeats = fmt == "gif" and frame_count > 1 and loop is not None and loop != 1
+            total_duration = 0.0
             cycles = 1
             repeated = False
-            if repeats and 0.0 < total_duration < 1.0:
-                target = min(
-                    options.max_duration_seconds,
-                    total_duration + max(total_duration, 1.0),
-                )
-                wanted = int(math.ceil((target / total_duration) - 1e-9))
-                frame_cap = max(1, options.max_frames // max(1, len(durations)))
-                cycles = max(1, min(wanted, frame_cap))
-                if cycles > 1:
-                    repeated = True
-                    state.add_warning("gif_loop_repeated_analysis")
 
             timestamp = 0.0
             first_frame: Optional[np.ndarray] = None
@@ -229,53 +205,113 @@ def _pillow_frames(
             blank = Image.new("RGBA", image.size, (255, 255, 255, 255))
 
             frame_limit_hit = False
-            for cycle in range(cycles):
+            pending_limit_warning: Optional[str] = None
+            cycle = 0
+            while cycle < cycles:
                 # Each loop starts from a fresh canvas; GIF disposal does not
-                # carry across the loop seam.
-                canvas = blank.copy()
+                # carry across the loop seam.  ``blank`` is never mutated
+                # (``alpha_composite`` returns a new image), so it can be used
+                # directly without a defensive copy.
+                canvas = blank
                 for index in range(min(frame_count, usable_count)):
                     if timestamp >= options.max_duration_seconds:
                         state.truncated = True
-                        state.add_warning("duration_limit_reached")
                         if options.strict_limits:
+                            state.add_warning("duration_limit_reached")
                             raise LimitExceededError(
                                 "Media exceeds max_duration_seconds=%s"
                                 % options.max_duration_seconds
                             )
+                        # Deferred so cycle 0 keeps the original warning order:
+                        # the delay/transparency warnings were once emitted
+                        # before any frame was decoded.
+                        pending_limit_warning = "duration_limit_reached"
                         frame_limit_hit = True
                         break
                     if state.frames_yielded >= options.max_frames:
                         state.truncated = True
-                        state.add_warning("frame_limit_reached")
                         if options.strict_limits:
+                            state.add_warning("frame_limit_reached")
                             raise LimitExceededError(
                                 "Media exceeds max_frames=%d" % options.max_frames
                             )
+                        pending_limit_warning = "frame_limit_reached"
                         frame_limit_hit = True
                         break
 
                     image.seek(index)
+                    if cycle == 0:
+                        delay = float(image.info.get("duration", 0) or 0) / 1000.0
+                        if delay <= 0:
+                            delay = 0.1
+                            delay_assumed = True
+                        durations.append(delay)
+                    else:
+                        delay = durations[index]
                     disposal = int(getattr(image, "disposal_method", 0) or 0)
-                    restore = canvas.copy() if disposal == 3 else None
+                    # Disposal 3 restores the canvas as it was before this
+                    # frame.  ``alpha_composite`` does not mutate its inputs,
+                    # so keeping a reference is enough; no copy is needed.
+                    previous_canvas = canvas if disposal == 3 else None
                     canvas = Image.alpha_composite(canvas, image.convert("RGBA"))
                     frame = np.asarray(canvas.convert("RGB"))
                     if disposal == 2:
-                        canvas = blank.copy()
-                    elif disposal == 3 and restore is not None:
-                        canvas = restore
+                        canvas = blank
+                    elif previous_canvas is not None:
+                        canvas = previous_canvas
                     _check_pixels(frame, options)
                     if cycle == 0 and index == 0:
-                        first_frame = frame.copy()
+                        # ``convert`` produced a new image, and the resulting
+                        # array owns its data, so retaining it does not alias
+                        # the canvas used for later frames.
+                        first_frame = frame
 
-                    duration = durations[index]
-                    yield FrameRecord(frame, timestamp, duration, synthetic=cycle > 0)
+                    yield FrameRecord(frame, timestamp, delay, synthetic=cycle > 0)
                     state.frames_yielded += 1
                     if cycle > 0:
                         state.synthetic_frames += 1
-                    last_end = timestamp + duration
-                    timestamp += duration
+                    last_end = timestamp + delay
+                    timestamp += delay
+                if cycle == 0 and frame_limit_hit and len(durations) < usable_count:
+                    # A limit cut the first pass short.  Finish collecting the
+                    # delays so the reported duration and the repeat decision
+                    # match a full pre-pass; only truncated inputs pay for this.
+                    for index in range(len(durations), usable_count):
+                        image.seek(index)
+                        delay = float(image.info.get("duration", 0) or 0) / 1000.0
+                        if delay <= 0:
+                            delay = 0.1
+                            delay_assumed = True
+                        durations.append(delay)
+                if delay_assumed:
+                    state.add_warning("gif_delay_assumed")
+                if cycle == 0 and has_transparency:
+                    # GIF/PNG transparency has no inherent background.
+                    # Composite onto white, the usual page background, so
+                    # transparent areas do not become opaque black.  Disposal
+                    # is applied explicitly because Pillow does not composite
+                    # it into convert("RGBA").
+                    state.add_warning("transparency_composited_white")
+                if pending_limit_warning is not None:
+                    state.add_warning(pending_limit_warning)
                 if frame_limit_hit:
                     break
+                if cycle == 0:
+                    total_duration = sum(durations)
+                    if repeats and 0.0 < total_duration < 1.0:
+                        target = min(
+                            options.max_duration_seconds,
+                            total_duration + max(total_duration, 1.0),
+                        )
+                        wanted = int(math.ceil((target / total_duration) - 1e-9))
+                        frame_cap = max(1, options.max_frames // max(1, len(durations)))
+                        cycles = max(1, min(wanted, frame_cap))
+                        if cycles > 1:
+                            repeated = True
+                            state.add_warning("gif_loop_repeated_analysis")
+                cycle += 1
+
+            total_duration = sum(durations)
 
             if (
                 not repeated
