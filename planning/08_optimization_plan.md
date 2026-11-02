@@ -70,8 +70,27 @@ Status: implemented in 0.2.x.
    Results matched the captured baseline for the benchmark set; GIF timings improved modestly. No detector semantics, warnings, assumptions, or the `tile_grid_max` default changed.
 
 ### Phase 3: Algorithmic (careful testing)
-1. **Incremental suffix arrays** in engine
+Status: not started. Unlike phases 1-2 these change the shape of the per-frame computation; the acceptance bar is bit-identical events, not just identical smoke-fixture output. Only pursue if a profile after phases 1-2 shows the engine is a material share of runtime; decode and tiling dominate GIFs.
+
+1. **Incremental suffix min/max in `_detect_luminance`**
+   - What it means: for every history record the engine needs the min and max luminance of that record *and every newer record still in the 66 ms window* (`suffix_min`/`suffix_max` in `engine.py`). Those arrays define the local-extremum test that identifies where a transition started. Today `add_frame` appends one record, prunes the window, then rebuilds the whole suffix structure from scratch with two fresh arrays per history entry.
+   - The idea: keep the suffix state as a rolling structure tied to the sliding window and update it on append/prune instead of rescanning, avoiding per-frame allocation and Python loop overhead.
+   - Caveat: the window is short, so the history is tiny (about 2 records at 15 fps, up to roughly 7 for a 10 ms GIF delay). There is no real asymptotics win; appending a frame can invalidate every earlier suffix value, so "incremental" mainly means rolling buffers and less copying, and the payoff is modest.
+   - Must preserve: the coarse-step rule (`step_index` / `step_is_coarse`, which reports an unresolved single-frame step as `duration_ms=0`), and the pruning rule that keeps at least two records so the earliest can serve as `previous` for the next one. Suffix extrema for in-window indices only look at newer records, so the out-of-window reference record does not widen the extremum window.
+
 2. **Engine short-circuiting**
+   - Goal: skip work that provably cannot affect the result. Safe candidates, roughly highest value first:
+     - **Whole-detector red guard.** `_detect_red` computes UCS distances for every history record before applying `(record.red | now.red)`. If neither the current frame nor any history record has a saturated-red tile, `valid` is all-false by construction, so an early return is exactly semantics-preserving. Most ordinary content takes this path.
+     - **Per-record red candidate check.** Apply the same mask before computing the distance (`if not (record.red | now.red).any(): continue`). Whether this beats whole-grid vectorization depends on mask sparsity; benchmark instead of assuming.
+     - **Window-range prefilter in `_detect_luminance`.** A tile whose window-wide range (`suffix_max[0] - suffix_min[0]`) is too small can be excluded. The safe bound is model-dependent: under `wcag_relative` the SDR threshold is the bound, but under `cd_m2` the HDR Michelson branch can qualify a pair whose absolute difference is below `threshold * reference` (with `low >= 0.8 * reference` it needs at least `1.6 / 17` of relative luminance), so the prefilter must use the smaller of the SDR and HDR bounds. Getting this wrong silently drops real HDR flashes. Also requires moving from whole-grid ops to indexed ops, and fancy-indexing overhead can exceed the savings on dense frames. Risky.
+     - **Duplicate-frame skip.** If the new tile grid is elementwise identical to the previous record, all differences are zero and neither detector can fire. The record must still be appended (it changes future windows), but the per-frame detection pass can be skipped. The grid is small (192 x 192 x 3), and repeated GIF frames are common.
+     - **Area evaluation cache.** `AreaEvaluator.evaluate` is called repeatedly for the same or overlapping masks (candidates, synchronized flush, `_alternating` coalescing, flash union). Memoizing on mask identity/hash is a related win.
+   - Must not do: abort a file once the 7-transitions-per-second limit is exceeded. That shortens triggering media but changes reported measurements (`max_area`, `max_transition_duration_ms`, event counts, fast-flash merging) and the meaning of a full-file scan. The intent is skipping irrelevant work, not early verdicts.
+
+Considerations:
+- Verify with an equivalence test, not just the smoke fixtures: run the optimized detector and a reference implementation over randomized synthetic histories that cover exactly-at-threshold values, the local-extremum tolerance boundary, red tie-breaking, and the coarse-step path, and assert identical events and measurements.
+- Re-profile before and after each item; the engine loops are vectorized across tiles already, so small-history assumptions may not hold at high frame rates.
+- Keep changes independently revertible, one idea per commit, so a benchmark regression can be attributed.
 
 ## Testing strategy
 - Always run unit tests: `.venv/bin/python -m unittest discover -s tests -v`
