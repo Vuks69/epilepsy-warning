@@ -58,6 +58,8 @@ Based on line_profiler/cProfile on video; for GIFs focus shifts:
 2. **Optimize `tile_frame` allocations** - try to avoid some PIL object creation; test numpy box downsample.
 3. **Reduce copies in GIF compositing** - audit `_pillow_frames` for unnecessary `.copy()` calls.
 
+Status: implemented in 0.2.x. The LUT is module-level; tiling has a uint8 path that skips PIL for same-size grids and composites RGBA over black in numpy; the GIF decoder keeps canvas snapshots by reference because compositing never mutates its inputs.
+
 ### Phase 2: Medium effort (GIF-focused)
 1. **Numpy box downsample** implementation - replace PIL resize path, keep fallback or flag.
 2. **Fuse color transforms** in engine to cut passes.

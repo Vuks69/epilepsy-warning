@@ -9,7 +9,9 @@ checks, and anything else that displays user-supplied media. It is not a medical
 does not certify compliance.
 
 > Status: the Python library and CLI are implemented (`0.2.0`). The native Go port is still
-> planned. See `planning/` for the standards contract and architecture.
+> planned. Performance phases 1-2 are complete and phase 3 is not started; see
+> `planning/08_optimization_plan.md`. `planning/` also holds the standards contract and
+> architecture notes.
 
 ## Features
 
@@ -226,6 +228,13 @@ download script names the output directory after the list file.
 
 Planning and standards notes live in `planning/`; `planning/01_wcag_flash_thresholds.md` is the
 threshold contract and `planning/07_source_review.md` records the paper gaps.
+
+Performance work is tracked in `planning/08_optimization_plan.md`. Phases 1-2 are implemented:
+the sRGB-to-linear LUT, fused per-tile color features (`linear_rgb_features`), numpy GIF
+compositing, the uint8 tiling path (`tile_frame_uint8`), and a bit-exact numpy BOX downsample
+used as a fallback. Pillow remains the normal resize path because its C implementation is
+faster here. Phase 3 (algorithmic engine changes) is documented but not started. None of this
+changed detector semantics or the `tile_grid_max` default.
 
 ## Scope
 

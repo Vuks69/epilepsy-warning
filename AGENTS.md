@@ -5,6 +5,7 @@
 - Target scope is a reusable Python/Go media-analysis library, documented in `README.md` and `planning/`. The Python library (`0.2.0`) and CLI are implemented; the Discord bot and prototype analyzer have been removed. The Go port is still planned.
 - `planning/01_wcag_flash_thresholds.md` is the standards contract: WCAG 2.2 default, profiles, thresholds, and working values. `planning/04_architecture.md` defines the intended API and schema v2; `planning/05_implementation_plan.md` tracks the refactor.
 - `planning/07_source_review.md` is the gap analysis from the scientific paper in `planning/guidelines_photo_epilepsy.txt`; read it before changing detector semantics.
+- `planning/08_optimization_plan.md` tracks performance work. Phases 1-2 are implemented (sRGB LUT, `tile_frame_uint8`, numpy GIF compositing, exact numpy BOX fallback, fused `linear_rgb_features`). Phase 3 (incremental suffix state, engine short-circuiting) is documented but not started.
 - `pyproject.toml` describes the library, not the legacy bot. Core dependencies are `numpy`, `Pillow`, `imageio`, and `imageio-ffmpeg`.
 - There is no CI. `tests/` contains stdlib `unittest` tests; run them locally before claiming a change works.
 
@@ -27,6 +28,7 @@
 - `api.py` contains the public entry points: `analyze_file`, `analyze_bytes`, and `analyze_frames`.
 - `engine.py` owns the transition state machine, synchronization, flash pairing, sliding-window counting, and fast-flash merge.
 - `decode.py` isolates format decoding; `area.py` owns tiling and area qualification; `color.py` owns sRGB/linear/CIE UCS math.
+- Performance paths: `area.tile_frame_uint8` returns uint8 tile averages and is what `api.py` feeds the engine; public `tile_frame` wraps it as float32. Pillow's BOX resize is the normal path; the bit-exact numpy `_box_downsample` is a tested fallback. `color.linear_rgb_features` computes luminance, redness, the saturated-red mask, and CIE UCS in one pass. `decode._alpha_composite_rgba` vectorizes Pillow's `AlphaComposite.c` formula. Keep these equivalent to their reference helpers (tests cover this).
 - `standards.py` is the profile registry; `options.py` holds analysis and display assumptions; `result.py` is schema v2.
 - `cli.py` is a thin wrapper. Keep the core free of platform I/O, downloads, moderation actions, and temp-file side effects.
 
@@ -37,6 +39,9 @@
 - The analysis grid is capped by `AnalysisOptions.tile_grid_max` (default 192). Fine high-frequency patterns can be averaged away; the result always warns `tile_averaging_approximation`.
 - Opposing transitions are paired into flashes before the area test; area qualifies a flash for rate counting and is not an independent trigger. The changed area is the pair mask union, but the pair must also overlap (`flash_area_overlap_ratio`, default 0.30) unless the union is large (`flash_area_union_scale`, default 1.50). Those tolerances are heuristics, not normative thresholds.
 - GIF frames are composited over white; Pillow does not apply disposal when converting a single frame, so `decode.py` tracks disposal explicitly. Do not switch back to `image.convert("RGB")` per frame: transparent pixels become a dark palette color and fabricate full-screen flashes.
+- The decoder keeps an RGBA numpy canvas and replaces it per frame rather than mutating it; yielded `frame` arrays are views into that canvas. Do not mutate them, and do not switch to in-place canvas updates: disposal-3 snapshots and the retained first frame depend on the replace-only invariant.
+- Do not replace the Pillow BOX resize normal path with the numpy fallback without benchmarking. The numpy implementation is bit-exact but roughly 5-8x slower for real downscales in this pipeline; it exists for portability and as a tested reference.
+- Keep `linear_rgb_features` in sync with `linear_rgb_to_luminance`, `red_ratio`, `is_saturated_red`, and `linear_rgb_to_ucs`, and keep the sRGB LUT built with the same float32 ops as the float path. Tests assert uint8 and `value / 255` inputs agree exactly.
 - A single-frame step sampled at an interval longer than the 66 ms cutoff is treated as an unresolved hard cut (`duration_ms=0`). This is deliberate recall insurance for low-frame-rate GIFs, not a measured transition duration; it can over-count a real fade that spans one coarse sample interval.
 - Looping GIFs shorter than one second are repeated through enough cycles to cover roughly one second plus one cycle (`gif_loop_repeated_analysis`); longer looping GIFs get a synthetic loop-seam frame (`gif_loop_wrap_analyzed`). Synthetic frames are analysis-only and do not change the reported media duration.
 - Video timestamps come from constant container frame rate, not per-frame presentation timestamps. Color management assumes sRGB; motion compensation and scene-change classification are not implemented.
