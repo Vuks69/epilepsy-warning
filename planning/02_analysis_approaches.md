@@ -123,18 +123,41 @@ cross-standard compliance.
 - Real-time stream analysis and frame modification/filtering
 - Medical diagnosis or individualized risk prediction
 
-## Known gaps in the current prototype
+## Implementation status (Python `0.2.0`)
 
-- Counts frame differences as flashes (factor-of-two error against the 6-transition limit)
-- Assumes 30 fps instead of real timestamps
-- No 66 ms transition duration or per-tile state tracking
-- No 20 ms area synchronization
-- Whole-frame average instead of a 10-degree-field tile map
-- Red heuristic is an RGB ratio, missing the CIE 1976 UCS difference test
-- Uses old WCAG 2.1 framing without the 2023 harmonized red definition
-- No standards profiles, HDR/reference-luminance handling, or display assumptions
-- No GIF loop wrap-around
-- No typed errors or resource limits for untrusted input
+The required v1 approach is implemented in the `epilepsy_warning` package:
+timed transitions -> opposing pairs -> 20 ms area synchronization -> sliding 1 s window ->
+fast-flash merge, with per-tile state, the 416x416 CSS-px area model, and a standards-profile
+layer. The old frame-difference prototype and its Discord bot are gone.
+
+Covered now:
+- Transition-based counting (6 transitions = 3 flashes); luminance and red counted separately.
+- 66 ms qualifying-transition rule, including the coarse-step (unresolved single-frame step ->
+  `duration_ms=0`) rule for low-frame-rate GIFs.
+- CIE 1976 UCS >= 0.2 red-difference test plus the linear `R/(R+G+B) >= 0.8` saturation test.
+- 20 ms same-direction area synchronization and the local-extremum fade rejection.
+- 10-degree / 0.006 sr area model, normalized to a 416x416 CSS-px field; small-source clamping
+  with stronger overlap/frame-coverage guards below the base threshold (heuristics, recorded).
+- 65 Hz fast-flash merge (on by default) with a mixed-rate guard.
+- Standards profiles: `wcag22`, `iso9241-391`, `itu-r-bt1702`, `ofcom` (all partial),
+  `nhk-jba` (not implemented/rejected), `custom`.
+- Relative-luminance `cd_m2` model for the broadcast profiles (SDR 20 cd/m² change and
+  Michelson >= 1/17 HDR branches); display geometry (`DisplayGeometry`) for known screens.
+- GIF decoding with delays, disposal (2/3), loop-repeat for <1 s clips, and a loop-seam frame;
+  RGBA composited over white so transparent pixels do not fabricate flashes.
+- Typed errors, resource limits (`max_bytes`/`max_duration_seconds`/`max_frames`/`max_pixels`),
+  `analysis_timeout_seconds`, and explicit `inconclusive`/truncation.
+- Structured result schema v2 with profile, working values, assumptions, warnings, measurements.
+
+Still open (tracked in `05_implementation_plan.md`):
+- Scene-change/inversion classification for broadcast profiles (not implemented; WCAG default
+  documents that it does not classify these).
+- Motion compensation (experimental pre-filter, opt-in, no public thresholds).
+- PQ/HLG transfer-function and wide-gamut color handling; color-space metadata detection is not
+  done (color is always assumed sRGB and reported as such).
+- Static bold-pattern analysis (separate detector, later).
+- Automated golden-media tests, property tests, benchmarks, and CI.
+- The native Go port.
 
 These are tracked in `05_implementation_plan.md`; the source rationale is in
 `07_source_review.md`.

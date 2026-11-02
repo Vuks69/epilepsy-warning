@@ -96,9 +96,12 @@ SSRF, redirects, MIME sniffing, and retries in the application.
 
 - **GIF**: decode frames and delays, handle disposal modes, and analyze the loop transition from
   the last frame back to the first.
-- **Video**: stream frames through ffmpeg; preserve presentation timestamps. Never assume 30 fps.
-- **Color metadata**: read color space, transfer function, and HDR metadata when available.
-  Missing metadata is an explicit warning, not a silent assumption.
+- **Video**: stream frames through `imageio`/`imageio-ffmpeg`; timestamps come from the constant
+  container frame rate. Per-frame presentation timestamps are not exposed by the decoder, so the
+  analysis never assumes 30 fps but does not recover true per-frame PTS; the rate is recorded and
+  a fallback rate is assumed (and warned) only when the container reports none.
+- **Color metadata**: color space, transfer function, and HDR metadata are **not** read. Color is
+  always treated as sRGB and reported with `color_space_assumed_srgb`.
 - **Sampling**: native frame rate by default for short clips; configurable cap. If sampling is
   required, sample fast enough to catch 66 ms transitions (target >= 60 Hz) and record it.
 - **Resolution**: tile the frame for area analysis. Keep enough resolution to approximate the
@@ -271,3 +274,9 @@ reflected in `warnings`/`inconclusive`.
 - Property tests: deterministic output, monotonic thresholds, frame-rate invariance.
 - Cross-language conformance: same fixtures and schema, with numeric tolerances.
 - Performance budget tests at 24/30/60/120 fps with a bounded tile grid.
+
+Current coverage: `tests/` (stdlib `unittest`, 48 tests) has color, area, engine, media, and CLI
+tests, and they pass. Unit tests cover sRGB/linear conversion, relative luminance, CIE UCS, red
+saturation, the transition/area/fast-flash state machine, GIF transparency/disposal, and the CLI.
+Golden-media, property, benchmark, and cross-language conformance tests are planned but not yet
+added; there is no CI.

@@ -3,6 +3,9 @@
 Goal: ship a reusable, standards-explicit library (Python first, Go second) that classifies GIFs
 and short videos for photosensitive epilepsy triggers. The Discord bot is not a deliverable.
 
+Checkbox legend: `[x]` done, `[ ]` not started, `[~]` partially implemented (some pieces done,
+noted in-line).
+
 ## Phase 0: Scope reset (done)
 - [x] Rewrite planning docs around a library, not a bot
 - [x] Move Discord concerns out of scope
@@ -26,8 +29,10 @@ and short videos for photosensitive epilepsy triggers. The Discord bot is not a 
 - [x] Decode GIF with correct delays/disposal and loop wrap-around
   - short looping GIFs repeat enough cycles to cover the one-second window; longer clips get a
     loop-seam frame; both are marked synthetic and warned about
-- [ ] Decode video via `imageio`/`imageio-ffmpeg` with real presentation timestamps
-  - current: constant container frame rate, warned in results
+- [x] Decode video via `imageio`/`imageio-ffmpeg`
+  - uses the constant container frame rate; per-frame presentation timestamps are not exposed by
+    the decoder and are reported with `video_timestamps_from_constant_fps`. A fallback rate is
+    assumed (and warned) only when the container reports none. This is the only open item here.
 - [x] Build per-tile luminance/color state tracking
 - [x] Implement the **66 ms** qualifying-transition rule
 - [x] Implement opposing-transition pairing and **6-transition / 1-second** counting
@@ -44,10 +49,16 @@ and short videos for photosensitive epilepsy triggers. The Discord bot is not a 
 - [x] Replace the CLI with a thin wrapper and add `--standard`/display flags
 
 ## Phase 3: Python verification and packaging
-- [x] Build synthetic timing fixtures for every boundary in `04_architecture.md`
-- [x] Build negative fixtures (slow fades, small areas, pans, running feet, cuts)
-  - covered: slow fades, small areas, GIF transparency/disposal, camera/object motion;
-    synthetic pans/cuts still open
+- [x] Build synthetic timing fixtures for the transition/area/red/fast-flash boundaries
+  - covered by `tests/test_engine.py`: 6 vs 7 transitions, slow fade not counted, 66 ms counted,
+    coarse-step -> `duration_ms=0`, small vs large area, saturated-red counted separately,
+    65 Hz merge, disjoint vs overlapping motion edges, and small-source clamping. Not every
+    boundary in `04_architecture.md` has a fixture (e.g. 20 ms sync boundary, 65 Hz mixed-rate,
+    SDR/HDR luminance boundaries, display-geometry area).
+- [x] Build negative fixtures for the decoder path
+  - covered by `tests/test_media.py`: GIF loop repeat, transparent GIF composited over white,
+    disposal-3 canvas restore, static image safe, video bytes rejected, byte limit enforced.
+    Synthetic pans/cuts and scene-cut negatives are still open.
 - [x] Add unit tests for color, transitions, pairing, synchronization, windowing, area
 - [ ] Add automated golden media tests (`examples/triggering/*`, `examples/not-triggering/*`)
 - [ ] Add property tests for determinism, monotonicity, and frame-rate invariance
@@ -56,13 +67,22 @@ and short videos for photosensitive epilepsy triggers. The Discord bot is not a 
 - [ ] Publish to PyPI (`epilepsy-warning`) with docs and changelog
 - [x] Rewrite README usage for the stable library API
 
+Current test posture: stdlib `unittest`, 48 tests in `tests/` (color, area, engine, media,
+cli); no pytest, no CI, no benchmarks. `ruff` is configured and the package is
+editable-installed in `.venv`.
+
 ## Phase 4: Modern-content features (P1)
-- [ ] HDR/reference-luminance mode (PQ/HLG, 200 cd/m² default, theater 48 cd/m²)
-- [ ] Color-space metadata detection via ffprobe/ffmpeg; explicit warnings when missing
+- [~] Relative-luminance `cd_m2` mode is implemented for the broadcast profiles (SDR: >=20 cd/m²
+  change when darker state <160 cd/m²; HDR: Michelson contrast >= 1/17 when darker state
+  >=160 cd/m²), with a configurable `reference_luminance_cd_m2` (default 200). PQ/HLG transfer
+  functions and wide-gamut handling are not yet done (color is always assumed sRGB).
+- [ ] Color-space metadata detection via ffprobe/ffmpeg; explicit warnings when missing. Color is
+  always assumed sRGB and reported with `color_space_assumed_srgb`.
 - [x] **65 Hz** fast-flash merge and mixed-rate guard
-- [x] ISO/ITU-R/Ofcom profiles; Japan profile after that
+- [x] ISO/ITU-R/Ofcom profiles; `nhk-jba` (Japan) is registered as not implemented/rejected
 - [ ] Scene-change/inversion classification for broadcast profiles
-- [ ] Analyze at the largest expected display size; VR/FOV geometry support
+- [~] Known display geometry is supported: `DisplayGeometry` maps screen diagonal + viewing
+  distance to a 10-degree field; the default remains the 416x416 CSS-px assumption.
 - [x] Optional advisory `extended_exposure` (5+ s near-limit, no normative threshold)
 
 ## Phase 5: Go port

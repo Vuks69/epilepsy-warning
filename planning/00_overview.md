@@ -6,6 +6,12 @@ Applications that display user-supplied GIFs and short videos have no cheap, rel
 screen them for photosensitive epilepsy triggers. Reimplementing WCAG flash analysis in every
 project is error-prone, slow to validate, and easy to get dangerously wrong.
 
+## Status
+
+The Python library and CLI are implemented (`epilepsy_warning` `0.2.0`, result schema v2). The
+original Discord bot and the frame-difference prototype are gone. The Go port is still planned
+and not started. Details live in `05_implementation_plan.md` and `08_optimization_plan.md`.
+
 ## Scope
 
 Build a **reusable media analysis library**, consumable from Python and Go projects. The

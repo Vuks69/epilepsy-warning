@@ -179,3 +179,24 @@ The plan's core approach remains valid; the updated plan moves from "frame diffe
 to "timed transitions -> synchronized areas -> standards profile". Default to WCAG 2.2/ISO red
 semantics, make display assumptions explicit, and treat the paper's 66 ms/20 ms/65 Hz values as
 configurable working values with their provenance recorded.
+
+## Implementation status (Python `0.2.0`)
+
+Most P0/P1 corrections from the review are implemented in `src/epilepsy_warning/`; the mapping is
+tracked in `05_implementation_plan.md`. Summary:
+
+| Paper correction | Status |
+|---|---|
+| Count transitions, not frame diffs (6/s) | Done |
+| 66 ms qualifying-duration rule (+ coarse-step `duration_ms=0`) | Done |
+| 20 ms area synchronization | Done |
+| 65 Hz fast-flash merge + mixed-rate guard | Done (on by default) |
+| WCAG 2.2 / ISO red: linear `R/(R+G+B) >= 0.8` + CIE 1976 UCS >= 0.2 | Done |
+| Relative-luminance + HDR (cd/m² SDR, Michelson 1/17) | Partial: relative model done; PQ/HLG transfer not |
+| 10-degree / 416x416 CSS-px area model + small-source clamping | Done |
+| Standards profiles (WCAG/ISO/ITU/Ofcom/Japan) | Profiles registered; Japan not implemented |
+| GIF loop wrap-around | Done |
+| Typed errors, limits, schema v2 | Done |
+
+Open (P2): PQ/HLG transfer + color metadata, scene-change classification, motion compensation,
+static-pattern analysis, golden-media/property tests + benchmarks + CI, and the Go port.
