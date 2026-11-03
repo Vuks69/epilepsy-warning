@@ -113,6 +113,9 @@ def _run(
 
     started = time.monotonic()
     frames = 0
+    early_stop = False
+    engine_result: Optional[EngineResult] = None
+    analyzed_span: float = 0.0
 
     for record in records:
         if time.monotonic() - started > options.analysis_timeout_seconds:
@@ -135,9 +138,47 @@ def _run(
         assert engine is not None and grid is not None
         engine.add_frame(record.timestamp, tile_frame_uint8(frame, grid))
         frames += 1
+        # The analyzed span is how much media was actually scanned. It grows
+        # with every frame — including synthetic repeat cycles added for short
+        # looping GIFs — so it can exceed the media's own duration; it is kept
+        # separate from ``state.duration`` and reported on every result.
+        analyzed_span = max(analyzed_span, record.timestamp + record.duration)
+
+        if options.quick:
+            # Quick mode probes after every frame and stops as soon as a
+            # triggering prefix is confirmed. A triggering prefix is evidence
+            # that the working values were exceeded within the frames seen so
+            # far; a later frame could still merge a fast sequence back to safe,
+            # so the verdict can over-report. It never under-reports: a non
+            # triggering probe keeps scanning to a full result.
+            if engine.quick_should_finish(record.timestamp):
+                engine_result = engine.quick_finish()
+                if engine_result.is_triggering:
+                    early_stop = True
+                    # The decoder was abandoned, so the true media duration is
+                    # unknown: report it as 0 rather than a synthetic timestamp.
+                    # The analyzed span was tracked on every preceding frame.
+                    state.duration = 0.0
+                    if analyzed_span > 0:
+                        state.sampled_fps = frames / analyzed_span
+                    break
 
     if engine is None or area is None or grid is None:
         raise DecodeError("No frames were decoded")
+
+    if early_stop:
+        return _build_result(
+            engine_result,
+            state,
+            options,
+            profile,
+            area,
+            grid,
+            frames,
+            area_model,
+            quick=True,
+            analyzed_span_seconds=analyzed_span,
+        )
 
     engine_result = engine.finish()
     return _build_result(
@@ -149,6 +190,7 @@ def _run(
         grid,
         frames,
         area_model,
+        analyzed_span_seconds=analyzed_span,
     )
 
 
@@ -161,6 +203,8 @@ def _build_result(
     grid: TileGrid,
     frames: int,
     area_model: str,
+    quick: bool = False,
+    analyzed_span_seconds: float = 0.0,
 ) -> AnalysisResult:
     warnings: List[str] = []
     for warning in state.warnings:
@@ -181,6 +225,8 @@ def _build_result(
         warnings.append("frames_sampled")
     if state.truncated:
         warnings.append("analysis_incomplete")
+    if quick:
+        warnings.append("analysis_early_stopped")
 
     is_triggering = engine_result.is_triggering
     inconclusive = bool(state.truncated)
@@ -208,6 +254,7 @@ def _build_result(
         fast_flash_sequences=engine_result.fast_flash_sequences,
         merged_fast_flash_transitions=(engine_result.merged_fast_flash_transitions),
         duration_seconds=state.duration,
+        analyzed_span_seconds=analyzed_span_seconds,
         frames_analyzed=frames,
         sampled_fps=state.sampled_fps,
     )
@@ -267,4 +314,5 @@ def _build_result(
         media=media,
         warnings=warnings,
         analyzer=analyzer,
+        quick=quick,
     )

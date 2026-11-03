@@ -85,6 +85,9 @@ options = AnalysisOptions(
     max_frames=5000,
     max_bytes=64 * 1024 * 1024,
     analysis_timeout_seconds=60.0,
+    # quick=True stops as soon as a triggering prefix is confirmed and returns
+    # a partial result marked `quick` (faster; may over-report fast flashes).
+    quick=False,
 )
 result = analyze_file("clip.mp4", options)
 ```
@@ -141,7 +144,21 @@ TRIGGERING  examples/triggering/1.gif  (luminance_transition_rate_exceeded)
 Safe  examples/not-triggering/1.gif
 ```
 
-`--verbose` adds the profile, rate/area/media measurements, and warnings. `--json` emits one
+`--verbose` adds the profile, rate/area/media measurements, and warnings. `--brief` prints only
+the verdict and path (the exit codes still encode the yes/no: `0` safe, `1` triggering, `2` error)
+and omits reasons and measurements. `--brief` only changes what is printed; it does **not** stop the
+analysis early, and a triggering verdict is always a full-file scan unless `--quick` is
+also set (see below).
+
+`--quick` stops as soon as a triggering prefix is confirmed and returns a partial verdict, without
+scanning the rest of the media. It is meant for latency-sensitive contexts (such as a moderation
+scanner that would rather remove borderline content fast): it is faster **for triggering media** —
+it short-circuits once a prefix trips the guard — but it errs toward flagging, so it can over-report
+fast-flashing content that a full scan would clear. On content a full scan would clear, `--quick`
+still runs the whole scan plus a recall-biased guard that can confirm up to 16 partial verdicts
+before giving up, so it is measurably *slower* on safe media, not faster. Its result carries the
+`quick` field and an `analysis_early_stopped` warning; it never misses content a full scan would flag. It is
+opt-in — the default is always a complete scan. `--json` emits one
 object for a single file and an array for multiple files. Other useful flags include
 `--area-model`, `--max-flashes-per-second`, `--max-duration-seconds`, `--max-frames`,
 `--sample-fps`, `--strict-limits`, `--no-fast-flash-merge`, and `--extended-exposure`.
@@ -204,6 +221,11 @@ They are recorded in every result under `assumptions`.
 - The 65 Hz merge cannot be observed faithfully in media sampled below that rate.
 - Default limits apply (`60 s`, `5000` frames, `64 MiB`, `60 s` wall time). Truncated analyses
   are marked `inconclusive` and warned about.
+- The opt-in `quick` mode (`--quick` / `AnalysisOptions(quick=True)`) stops as soon as a triggering
+  prefix is confirmed and marks its result `quick` with an `analysis_early_stopped` warning. It is a
+  recall-biased partial scan: it never misses content a full scan would flag, but it can over-report
+  fast-flashing content that a full scan would clear. Use it only when speed and removing borderline
+  content matter more than full correctness.
 - This is a safety aid. It can miss content and can flag benign motion. Do not treat it as a
   guarantee, a compliance certification, or medical advice.
 

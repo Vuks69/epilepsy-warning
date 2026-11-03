@@ -5,7 +5,7 @@
 - Target scope is a reusable Python/Go media-analysis library, documented in `README.md` and `planning/`. The Python library (`0.2.0`) and CLI are implemented; the Discord bot and prototype analyzer have been removed. The Go port is still planned.
 - `planning/01_wcag_flash_thresholds.md` is the standards contract: WCAG 2.2 default, profiles, thresholds, and working values. `planning/04_architecture.md` defines the intended API and schema v2; `planning/05_implementation_plan.md` tracks the refactor.
 - `planning/07_source_review.md` is the gap analysis from the scientific paper in `planning/guidelines_photo_epilepsy.txt`; read it before changing detector semantics.
-- `planning/08_optimization_plan.md` tracks performance work. Phases 1-2 are implemented (sRGB LUT, `tile_frame_uint8`, numpy GIF compositing, exact numpy BOX fallback, fused `linear_rgb_features`). Phase 3 (incremental suffix state, engine short-circuiting) is documented but not started.
+- `planning/08_optimization_plan.md` tracks performance work. Phases 1-2 are implemented (sRGB LUT, `tile_frame_uint8`, numpy GIF compositing, exact numpy BOX fallback, fused `linear_rgb_features`). Phase 3 (incremental suffix state, engine short-circuiting) is documented but not started. A separate opt-in `--quick` early-verdict mode was added per request; it stops on a triggering prefix and marks the result `quick` — intentionally distinct from Phase 3, which skips irrelevant work but never stops early.
 - `pyproject.toml` describes the library, not the legacy bot. Core dependencies are `numpy`, `Pillow`, `imageio`, and `imageio-ffmpeg`.
 - There is no CI. `tests/` contains stdlib `unittest` tests; run them locally before claiming a change works.
 

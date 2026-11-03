@@ -46,6 +46,7 @@ class Measurements:
     fast_flash_sequences: int = 0
     merged_fast_flash_transitions: int = 0
     duration_seconds: float = 0.0
+    analyzed_span_seconds: float = 0.0
     frames_analyzed: int = 0
     sampled_fps: float = 0.0
 
@@ -67,6 +68,7 @@ class Measurements:
             "fast_flash_sequences": self.fast_flash_sequences,
             "merged_fast_flash_transitions": self.merged_fast_flash_transitions,
             "duration_seconds": round(self.duration_seconds, 4),
+            "analyzed_span_seconds": round(self.analyzed_span_seconds, 4),
             "frames_analyzed": self.frames_analyzed,
             "sampled_fps": round(self.sampled_fps, 3),
         }
@@ -170,6 +172,7 @@ class AnalysisResult:
     media: MediaInfo
     warnings: List[str]
     analyzer: AnalyzerInfo
+    quick: bool = False
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -185,6 +188,7 @@ class AnalysisResult:
             "media": self.media.to_dict(),
             "warnings": list(self.warnings),
             "analyzer": self.analyzer.to_dict(),
+            "quick": self.quick,
         }
 
     def to_json(self, indent: Optional[int] = None) -> str:

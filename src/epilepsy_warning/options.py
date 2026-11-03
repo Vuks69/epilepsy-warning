@@ -77,6 +77,7 @@ class AnalysisOptions:
     no_downsample: bool = False
     tile_grid_max: int = 192
     strict_limits: bool = False
+    quick: bool = False
 
     def __post_init__(self) -> None:
         get_profile(self.standard)
@@ -183,6 +184,7 @@ class AnalysisOptions:
             "no_downsample": self.no_downsample,
             "tile_grid_max": self.tile_grid_max,
             "strict_limits": self.strict_limits,
+            "quick": self.quick,
         }
 
     def fingerprint(self) -> str:

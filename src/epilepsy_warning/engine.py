@@ -9,8 +9,9 @@ flashes.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, replace
-from typing import Dict, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -34,6 +35,10 @@ from .standards import StandardProfile
 _LUMINANCE = "luminance"
 _RED = "red"
 _LOCAL_EXTREMUM_TOLERANCE = 0.002
+
+# Quick mode confirms at most this many prefix passes before the guard stops
+# tripping; dense-but-safe content then falls through to one normal finish.
+_QUICK_MAX_CONFIRMATIONS = 16
 
 
 @dataclass(frozen=True)
@@ -121,6 +126,12 @@ class TransitionEngine:
         self._last_red_direction = np.zeros(shape, dtype=np.int8)
         self._history: List[_HistoryRecord] = []
         self._buckets: Dict[Tuple[str, int, float], _Bucket] = {}
+        # Timestamps at which new buckets are created, used by the quick-mode
+        # guard to count qualifying transitions within a sliding second.
+        self._bucket_created_at: Deque[float] = deque()
+        # Number of quick-mode confirmations run so far; throttled so that
+        # high-transition-but-safe content cannot drive unbounded work.
+        self._quick_confirmations = 0
 
     @profile
     def add_frame(self, timestamp: float, tiles_rgb: np.ndarray) -> None:
@@ -217,7 +228,41 @@ class TransitionEngine:
             extended_exposure_advisory=extended_advisory,
         )
 
-    # -- detection -----------------------------------------------------
+    def quick_finish(self) -> EngineResult:
+        """Confirm or clear a quick-mode verdict over what has been seen.
+
+        The caller runs this from quick mode once the cheap guard trips: it is
+        exactly :meth:`finish`, so its verdict uses the same logic as a full
+        scan.  A triggering verdict here is evidence that the working values
+        were exceeded *within the frames analyzed so far*; a later frame can
+        still merge a fast sequence back to safe, so this can over-report.
+        Quick mode never under-reports: it only stops on this verdict and, if
+        it is not triggering, keeps scanning to completion.
+        """
+        self._quick_confirmations += 1
+        return self.finish()
+
+    # -- quick mode ----------------------------------------------------
+
+    def quick_should_finish(self, now: float) -> bool:
+        """Return True once a full pass is worth running to confirm a verdict.
+
+        Counts qualifying transitions (raw buckets, measured before the
+        alternating and area-qualification steps, so it over-counts and errs
+        toward flagging) created within the last second and trips past the
+        transition limit.  It is a recall-biased probe, not a verdict: the
+        confirmation in ``quick_finish`` is what actually decides.  Confirmation
+        is throttled so that dense-but-safe content cannot drive unbounded work.
+        The window is trimmed before the cap check so the deque never grows past
+        one second regardless of how many confirmations have run.
+        """
+        while self._bucket_created_at and self._bucket_created_at[0] < now - 1.0:
+            self._bucket_created_at.popleft()
+        if self._quick_confirmations >= _QUICK_MAX_CONFIRMATIONS:
+            return False
+        return len(self._bucket_created_at) > self.options.max_transitions_per_second
+
+    # -- detection ----------------------------------------------------
 
     @profile
     def _detect_luminance(self, timestamp: float, cutoff: float) -> None:
@@ -448,6 +493,8 @@ class TransitionEngine:
                         mask=selected.copy(),
                         max_duration_ms=duration_ms,
                     )
+                    if self.options.quick:
+                        self._bucket_created_at.append(float(start))
                 else:
                     bucket.mask |= selected
                     bucket.max_duration_ms = max(bucket.max_duration_ms, duration_ms)

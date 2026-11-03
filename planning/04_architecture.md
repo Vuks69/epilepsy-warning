@@ -47,6 +47,11 @@ options = AnalysisOptions(
 result: AnalysisResult = analyze_file("clip.mp4", options=options)
 ```
 
+For a latency-sensitive scanner, set `quick=True` to stop as soon as a triggering prefix is
+confirmed; the result carries `quick: true` and `analysis_early_stopped` and reports
+`analyzed_span_seconds` separately from the (unknown) media `duration_seconds`. `--brief` and
+`--json` are output-only and compose with `--quick`.
+
 Go:
 ```go
 import epilepsy "github.com/<owner>/epilepsy-warning"
@@ -153,6 +158,7 @@ Proposed cross-language shape (schema v2):
   },
   "is_triggering": true,
   "risk": "high",
+  "quick": false,
   "reasons": ["transition_rate_exceeded", "large_flashing_area"],
   "measurements": {
     "max_luminance_transitions_per_second": 14,
@@ -163,6 +169,7 @@ Proposed cross-language shape (schema v2):
     "synchronized_area_merges": 2,
     "fast_flash_sequences": 0,
     "duration_seconds": 4.2,
+    "analyzed_span_seconds": 4.2,
     "frames_analyzed": 126,
     "sampled_fps": 30.0
   },
@@ -201,6 +208,11 @@ Design rules:
 - Human-readable messages are derived by the consumer.
 - Working values (66 ms, 20 ms, 65 Hz) are reported in `assumptions` with their provenance.
 - Timings/measurements include units in the field name.
+- `duration_seconds` is the media's own duration; `analyzed_span_seconds` is how much was actually
+  scanned. They differ for short looping media and for `--quick` (which abandons the decoder early):
+  a quick result reports `duration_seconds` unknown/zero and the scanned span separately.
+- `quick: true` marks a partial early-stop verdict that carries `analysis_early_stopped`; it may
+  over-report but never under-report relative to a full scan.
 - `inconclusive`/`truncated` results must be explicit, never coerced to `is_triggering: false`.
 
 ## Configuration
@@ -232,6 +244,7 @@ AnalysisOptions(
     max_pixels=1920 * 1080,
     decode_timeout_seconds=10,
     sample_fps=None,                    # None = native frame rate
+    quick=False,                        # stop on a confirmed triggering prefix
 )
 ```
 

@@ -43,6 +43,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="show measurements, media details, and warnings after the label",
     )
     parser.add_argument(
+        "--brief",
+        action="store_true",
+        help="print only the verdict and path; no reasons or measurements",
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help=(
+            "stop as soon as a triggering prefix is confirmed and report a "
+            "partial verdict; faster but may over-report fast-flashing content "
+            "(opt-in, not a full-file scan)"
+        ),
+    )
+    parser.add_argument(
         "--screen-diagonal-in",
         type=float,
         metavar="INCHES",
@@ -135,6 +149,7 @@ def _options_from_args(args: argparse.Namespace) -> AnalysisOptions:
         "enable_fast_flash_merge": not args.no_fast_flash_merge,
         "extended_exposure": args.extended_exposure,
         "no_downsample": args.no_downsample,
+        "quick": args.quick,
     }
     if args.area_model is not None:
         overrides["area_model"] = args.area_model
@@ -165,6 +180,10 @@ def _print_summary(path: str, result: AnalysisResult) -> None:
     if result.reasons:
         line += "  (%s)" % ", ".join(result.reasons)
     print(line)
+
+
+def _print_brief(path: str, result: AnalysisResult) -> None:
+    print("%s  %s" % (_label(result), path))
 
 
 def _print_human(path: str, result: AnalysisResult) -> None:
@@ -253,13 +272,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             payloads.append({"path": path, "error": str(exc)})
             continue
 
+        # --json always collects a payload (printed after the human line), so
+        # the output mode is decoupled from it: --brief/--verbose and --json
+        # compose independently, while --json alone emits only the payload.
         if args.json:
             payload = {"path": path}
             payload.update(result.to_dict())
             payloads.append(payload)
+        if args.brief:
+            _print_brief(path, result)
         elif args.verbose:
             _print_human(path, result)
-        else:
+        elif not args.json:
             _print_summary(path, result)
 
         if result.is_triggering:
