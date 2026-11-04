@@ -156,8 +156,8 @@ Still open (tracked in `05_implementation_plan.md`):
 - PQ/HLG transfer-function and wide-gamut color handling; color-space metadata detection is not
   done (color is always assumed sRGB and reported as such).
 - Static bold-pattern analysis (separate detector, later).
-- Automated golden-media tests are done (`tests/test_golden_media.py`); property tests, benchmarks,
-  and CI are still open.
+- Automated golden-media and property tests are done (`tests/test_golden_media.py`,
+  `tests/test_property.py`); benchmarks and CI are still open.
 - The native Go port.
 
 These are tracked in `05_implementation_plan.md`; the source rationale is in

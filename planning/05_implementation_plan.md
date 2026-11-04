@@ -69,17 +69,32 @@ noted in-line).
     standing warnings. An opt-in short-circuit equivalence check (`EPILEPSY_GOLDEN_EQUIP=1`)
     toggles `TransitionEngine._enable_short_circuit` over the real decode path and asserts an
     identical measured surface.
-- [ ] Add property tests for determinism, monotonicity, and frame-rate invariance
+- [x] Add property tests for determinism, monotonicity, and frame-rate invariance
+  - covered by `tests/test_property.py`: property (Hypothesis) tests over synthetic clips rather
+    than exemplar fixtures. Determinism asserts `analyze_frames` produces byte-identical
+    `to_json()`/`to_dict()` across two fresh analyses (the result is a frozen dataclass with no
+    global RNG, so this guards against dict/set/float nondeterminism). Monotonicity encodes three
+    directed, all-else-equal invariants that never claim "bigger -> safe": a qualifying transition
+    stays qualifying as its critical-difference step grows, a qualifying flash stays qualifying as
+    both masks scale up uniformly (the area guard rejects lopsided changes), and a triggering clip
+    stays triggering as more valid alternating transitions are added. Frame-rate invariance
+    asserts densifying a clip by repeating frames at interpolated timestamps preserves the verdict
+    and `luminance_transitions` / `red_transitions` / `max_flashes_per_second` /
+    `max_luminance_transitions_per_second`, while leaving `max_transition_duration_ms` free (a
+    coarse single-frame step reads as 0 ms at low density, resolves to a real duration when more
+    samples bracket it).
 - [ ] Add benchmarks at 24/30/60/120 fps and a performance budget
 - [ ] Configure ruff, mypy, pytest, coverage in CI
 - [ ] Publish to PyPI (`epilepsy-warning`) with docs and changelog
 - [x] Rewrite README usage for the stable library API
 
-Current test posture: stdlib `unittest`, 68 test methods in `tests/` (color, area, engine, media,
-cli, golden-media); no pytest, no CI, no benchmarks. `ruff` is configured and the package is
-editable-installed in `.venv`. The golden-media module (3 methods) is network-backed: it runs from
-the cached `examples/triggering/*` / `examples/not-triggering/*` media and skips the short-circuit
-equivalence check unless `EPILEPSY_GOLDEN_EQUIP=1`.
+Current test posture: stdlib `unittest`, 74 test methods in `tests/` (color, area, engine, media,
+cli, golden-media, property); no pytest, no CI, no benchmarks. `ruff` is configured and the package
+is editable-installed in `.venv`. `hypothesis>=6.0` is a dev dependency driving the property module.
+The golden-media module (3 methods) is network-backed: it runs from the cached
+`examples/triggering/*` / `examples/not-triggering/*` media and skips the short-circuit equivalence
+check unless `EPILEPSY_GOLDEN_EQUIP=1`. The property module is fully synthetic, so it needs no
+media cache and stays fast (6 methods, ~3-4 s).
 
 ## Phase 4: Modern-content features (P1)
 - [~] Relative-luminance `cd_m2` mode is implemented for the broadcast profiles (SDR: >=20 cd/m²
@@ -130,8 +145,8 @@ equivalence check unless `EPILEPSY_GOLDEN_EQUIP=1`.
 - [ ] Add an optional sample consumer (Discord/Matrix) in `examples/`
 
 ## Immediate next steps
-1. Add automated golden media tests and a CI workflow.
+1. Configure a CI workflow (unit tests + golden-media + property tests).
 2. Decode real video presentation timestamps and color metadata; keep HDR warnings explicit.
-3. Add property tests (determinism, frame-rate invariance) and benchmarks.
+3. Add benchmarks at 24/30/60/120 fps and a performance budget.
 4. Validate the area/grid approximation against larger synthetic fixtures and pans/cuts.
 5. Port the engine to Go once the Python schema and fixtures are stable.

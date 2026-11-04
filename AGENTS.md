@@ -7,7 +7,7 @@
 - `planning/07_source_review.md` is the gap analysis from the scientific paper in `planning/guidelines_photo_epilepsy.txt`; read it before changing detector semantics.
 - `planning/08_optimization_plan.md` tracks performance work. Phases 1-2 are implemented (sRGB LUT, `tile_frame_uint8`, numpy GIF compositing, exact numpy BOX fallback, fused `linear_rgb_features`). Phase 3 (incremental suffix state, engine short-circuiting) is documented but not started. A separate opt-in `--quick` early-verdict mode was added per request; it stops on a triggering prefix and marks the result `quick` — intentionally distinct from Phase 3, which skips irrelevant work but never stops early.
 - `pyproject.toml` describes the library, not the legacy bot. Core dependencies are `numpy`, `Pillow`, `imageio`, and `imageio-ffmpeg`.
-- There is no CI. `tests/` contains stdlib `unittest` tests; run them locally before claiming a change works.
+- There is no CI. `tests/` contains stdlib `unittest` tests; run them locally before claiming a change works. `hypothesis` is a dev dependency (see `pyproject.toml`) driving `tests/test_property.py`, which covers determinism, directed monotonicity, and frame-rate invariance.
 
 ## Setup and verification
 
@@ -21,6 +21,7 @@
 - Both fixtures must print `TRIGGERING`. `epilepsy-scan` exits `1` when media is flagged: that is success for these checks, not a command failure. A full `4882.mp4` scan takes roughly 20 seconds with the default grid.
 - Check benign controls stay safe: `.venv/bin/epilepsy-scan examples/not-triggering/*.gif` (all must exit `0`).
 - Golden-media regression automates all of the above: `.venv/bin/python -m unittest tests.test_golden_media` asserts every fixture in `examples/triggering.lst` reports `TRIGGERING` and every fixture in `examples/not-triggering.lst` stays safe, over the cached media (downloaded once, reused across runs). Set `EPILEPSY_GOLDEN_EQUIP=1` to also run the Phase-3 short-circuit equivalence check (toggling `TransitionEngine._enable_short_circuit`) over the real decode path.
+- Property regression is synthetic and needs no media cache: `.venv/bin/python -m unittest tests.test_property`. Hypothesis properties assert byte-stable `to_json()`/`to_dict()` output, directed monotonicity (critical-difference step, uniform area scaling, transition-count), and densification invariance of the verdict and transition-level measurements — `max_transition_duration_ms` is intentionally exempt, as a coarse single-frame step resolves to a real duration once more samples bracket it.
 - These are smoke tests; the unit tests cover synthetic timing and area boundaries, but neither proves standards compliance.
 - `ruff` is configured in `pyproject.toml` (`E4`, `E7`, `E9`, `F`, `I`, `B` with `target-version = "py39"`). Run `.venv/bin/ruff check src/epilepsy_warning tests` and `.venv/bin/ruff format <paths>`.
 

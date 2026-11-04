@@ -67,7 +67,7 @@ code and owns all platform-specific concerns (intents, downloads, moderation act
 - Scene-change/inversion classification for broadcast profiles.
 - Motion compensation (experimental, opt-in, no public thresholds).
 - Static bold-pattern analysis (separate detector, later).
-- Automated golden-media tests, property tests, benchmarks, and CI.
+- Automated testing: benchmarks and CI remain; golden-media and property tests are done.
 - The Go port.
 
 ## Deliverables
@@ -76,8 +76,8 @@ code and owns all platform-specific concerns (intents, downloads, moderation act
   `0.2.0`, not yet published to PyPI.
 - Go module with the same API shape and schema v2 — planned, not started.
 - Thin `epilepsy-scan` CLI with standard/display options.
-- Synthetic + media fixture corpus with `unittest` coverage; golden-media regression tests are
-  done, property tests still open.
+- Synthetic + media fixture corpus with `unittest` coverage; golden-media regression tests and
+  property tests are done.
 - Documentation: usage, standards profiles, thresholds, assumptions, limitations.
 - Optional example consumer (e.g. a Discord bot) that depends on the library — not yet shipped.
 
