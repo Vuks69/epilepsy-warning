@@ -8,16 +8,27 @@ version = "0.2.0"
 description = "Standards-explicit detection of flashing and saturated-red content in GIFs and videos"
 readme = "README.md"
 requires-python = ">=3.9"
+license = "Apache-2.0"
+keywords = ["epilepsy", "photosensitive", "flash", "gif", "video", "wcag", "accessibility"]
+authors = [
+    { name = "Vuks", email = "vuks.official@gmail.com" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Typing :: Typed",
+]
+urls = { Homepage = "https://github.com/Vuks69/epilepsy-warning", Repository = "https://github.com/Vuks69/epilepsy-warning" }
 dependencies = [
     "imageio>=2.31.0",
     "imageio-ffmpeg>=0.4.9",
     "numpy>=1.24.0",
     "Pillow>=10.0.0",
-]
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Topic :: Multimedia :: Video",
 ]
 
 [project.scripts]
