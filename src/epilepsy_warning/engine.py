@@ -125,6 +125,30 @@ class TransitionEngine:
         self._last_luminance_direction = np.zeros(shape, dtype=np.int8)
         self._last_red_direction = np.zeros(shape, dtype=np.int8)
         self._history: List[_HistoryRecord] = []
+        # Whole-window saturated-red state, maintained incrementally for the
+        # red detector's early-out guard.  Appending only ever adds red tiles,
+        # so the pool grows as the window fills; a prune rebuilds it, until
+        # which it may be a conservative superset (a false "has red" only lets
+        # the detector run, never makes it misfire).
+        self._red_pool = np.zeros(shape, dtype=bool)
+        # The most recent tile grid, for the duplicate-frame skip.  The decoder
+        # replaces (never mutates) its canvas, so a bare reference is stable.
+        self._last_grid: Optional[np.ndarray] = None
+        # When False, every Phase 3 short-circuit is disabled and the engine is
+        # byte-for-byte the pre-optimization detector.  Kept on the instance
+        # (not an AnalysisOptions field) so an equivalence test can toggle it
+        # without touching public configuration or the result schema.
+        self._enable_short_circuit = True
+        # Did the most recently *detected* frame flip either direction state?
+        # The duplicate-frame skip is only safe when this is False: processing a
+        # duplicate of the previous frame is a no-op only if the previous frame
+        # left both direction states unchanged, in which case the duplicate
+        # (identical grid, identical history tail) makes the identical choice.
+        # A duplicate following a direction change can itself complete a flash
+        # pair (e.g. down then immediately up), so only the frames after such a
+        # change are skippable.  The flag is left untouched when a frame is
+        # skipped, so a whole static run stays gated on the first processed frame.
+        self._last_frame_changed_direction = False
         self._buckets: Dict[Tuple[str, int, float], _Bucket] = {}
         # Timestamps at which new buckets are created, used by the quick-mode
         # guard to count qualifying transitions within a sliding second.
@@ -148,11 +172,54 @@ class TransitionEngine:
         self._history.append(record)
 
         cutoff = timestamp - self.max_duration_s
+        pruned = False
         while len(self._history) >= 2 and self._history[1].timestamp < cutoff:
             self._history.pop(0)
+            pruned = True
+
+        # Keep the whole-window red pool in sync with the sliding window.  Only
+        # run when the red guard is active; when disabled this is dead weight
+        # avoided entirely so the disabled path matches the old code exactly.
+        if self._enable_short_circuit:
+            if red.any():
+                self._red_pool |= red
+            if pruned:
+                # A pop invalidates the running OR, so rebuild it.  Until the
+                # next prune the pool may be a conservative superset, which is
+                # safe: the guard only ever lets the detector run, never fires
+                # a false red transition.
+                self._red_pool = self._history[0].red
+                for previous in self._history[1:]:
+                    self._red_pool |= previous.red
 
         if len(self._history) < 2:
             return
+
+        # Duplicate-frame short-circuit.  Skip the per-frame detection pass when
+        # the new tile grid is elementwise identical to the previous frame's
+        # *and* the sliding window did not shrink this frame.  Equal pixels make
+        # every (record -> now) pair identical to the (record -> previous) pair
+        # already processed, and no prune means the record set is identical too
+        # (the only addition is the previous frame itself, a zero-difference
+        # no-op); the local-extremum suffix extrema are unchanged because the
+        # appended equal frame duplicates the window tail, so the duplicate makes
+        # the identical up/down choice and changes no bucket.  That reasoning
+        # holds only when the previous frame changed *neither* direction state:
+        # a duplicate following a direction change can itself complete a flash
+        # pair (a "down then immediately up"), which would move the direction
+        # state and cascade into later buckets.  ``_last_frame_changed_direction``
+        # is left untouched on a skip, so an entire static run stays gated on the
+        # first frame that actually ran detection.
+        if (
+            self._enable_short_circuit
+            and not pruned
+            and not self._last_frame_changed_direction
+            and self._last_grid is not None
+            and np.array_equal(tiles_rgb, self._last_grid)
+        ):
+            self._last_grid = tiles_rgb
+            return
+        self._last_grid = tiles_rgb
 
         self._detect_luminance(timestamp, cutoff)
         self._detect_red(timestamp, cutoff)
@@ -340,6 +407,9 @@ class TransitionEngine:
 
         self._last_luminance_direction[choose_up] = 1
         self._last_luminance_direction[choose_down] = -1
+        # choose_up/choose_down only fire where the direction actually flips, so
+        # their union is exactly where the state changed this frame.
+        self._last_frame_changed_direction = bool((choose_up | choose_down).any())
 
         instant_up = choose_up & (up_index == step_index) if step_is_coarse else None
         instant_down = choose_down & (down_index == step_index) if step_is_coarse else None
@@ -376,6 +446,11 @@ class TransitionEngine:
 
     @profile
     def _detect_red(self, timestamp: float, cutoff: float) -> None:
+        if self._enable_short_circuit and not self._red_pool.any():
+            # No saturated-red tile exists anywhere in the current window, so
+            # `(record.red | now.red)` is empty for every record and no red
+            # transition can qualify.  This early return is semantics-preserving.
+            return
         history = self._history
         count = len(history)
         now = history[-1]
@@ -434,6 +509,11 @@ class TransitionEngine:
 
         allowed = (best_direction != 0) & (best_direction != self._last_red_direction)
         self._last_red_direction[allowed] = best_direction[allowed]
+        # `allowed` only flips the red direction, so OR its presence into the
+        # frame-changed flag already set by the luminance detector.
+        self._last_frame_changed_direction = self._last_frame_changed_direction or bool(
+            allowed.any()
+        )
         if allowed.any():
             instant = allowed & (best_index == step_index) if step_is_coarse else None
             self._record(
