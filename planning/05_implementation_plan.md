@@ -83,18 +83,27 @@ noted in-line).
     `max_luminance_transitions_per_second`, while leaving `max_transition_duration_ms` free (a
     coarse single-frame step reads as 0 ms at low density, resolves to a real duration when more
     samples bracket it).
-- [ ] Add benchmarks at 24/30/60/120 fps and a performance budget
+- [x] Add benchmarks at 24/30/60/120 fps and a performance budget
+   - covered by `tests/test_performance.py`: a relative (regression) guard, not an absolute wall.
+     Per-frame `analyze_frames` cost over a deterministic two-tone 2 s clip is measured (`min` over
+     7 repeats) at each rate and asserted that the busiest rate stays within
+     `PER_FRAME_COST_GUARD_FACTOR` (3.0×) of the cheapest. This is machine-independent: machine
+     speed cancels in a ratio of two same-machine timings, and the 3.0× band leaves ~60% of
+     headroom above the observed worst-case ~1.85× (120 fps vs 24 fps per-frame), which is the
+     legitimate per-frame growth from the `_history` 66 ms window holding more entries at higher
+     fps. Synthetic and no media cache, so it runs anywhere (~1.6 s, no network).
 - [ ] Configure ruff, mypy, pytest, coverage in CI
 - [ ] Publish to PyPI (`epilepsy-warning`) with docs and changelog
 - [x] Rewrite README usage for the stable library API
 
-Current test posture: stdlib `unittest`, 74 test methods in `tests/` (color, area, engine, media,
-cli, golden-media, property); no pytest, no CI, no benchmarks. `ruff` is configured and the package
-is editable-installed in `.venv`. `hypothesis>=6.0` is a dev dependency driving the property module.
-The golden-media module (3 methods) is network-backed: it runs from the cached
+Current test posture: stdlib `unittest`, 75 test methods in `tests/` (color, area, engine, media,
+cli, golden-media, property, performance); no pytest, no CI, no benchmarks. `ruff` is configured
+and the package is editable-installed in `.venv`. `hypothesis>=6.0` is a dev dependency driving the
+property module. The golden-media module (3 methods) is network-backed: it runs from the cached
 `examples/triggering/*` / `examples/not-triggering/*` media and skips the short-circuit equivalence
 check unless `EPILEPSY_GOLDEN_EQUIP=1`. The property module is fully synthetic, so it needs no
-media cache and stays fast (6 methods, ~3-4 s).
+media cache and stays fast (6 methods, ~3-4 s); the performance guard is synthetic too and adds
+~1.6 s.
 
 ## Phase 4: Modern-content features (P1)
 - [~] Relative-luminance `cd_m2` mode is implemented for the broadcast profiles (SDR: >=20 cd/m²
@@ -147,6 +156,7 @@ media cache and stays fast (6 methods, ~3-4 s).
 ## Immediate next steps
 1. Configure a CI workflow (unit tests + golden-media + property tests).
 2. Decode real video presentation timestamps and color metadata; keep HDR warnings explicit.
-3. Add benchmarks at 24/30/60/120 fps and a performance budget.
+3. ~~Add benchmarks at 24/30/60/120 fps and a performance budget~~ (done; `tests/test_performance.py`,
+   relative per-frame-cost guard, see Phase 3).
 4. Validate the area/grid approximation against larger synthetic fixtures and pans/cuts.
 5. Port the engine to Go once the Python schema and fixtures are stable.
