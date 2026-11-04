@@ -76,8 +76,8 @@ code and owns all platform-specific concerns (intents, downloads, moderation act
   `0.2.0`, not yet published to PyPI.
 - Go module with the same API shape and schema v2 — planned, not started.
 - Thin `epilepsy-scan` CLI with standard/display options.
-- Synthetic + media fixture corpus with `unittest` coverage; golden-media and property tests are
-  still open.
+- Synthetic + media fixture corpus with `unittest` coverage; golden-media regression tests are
+  done, property tests still open.
 - Documentation: usage, standards profiles, thresholds, assumptions, limitations.
 - Optional example consumer (e.g. a Discord bot) that depends on the library — not yet shipped.
 

@@ -60,16 +60,26 @@ noted in-line).
     disposal-3 canvas restore, static image safe, video bytes rejected, byte limit enforced.
     Synthetic pans/cuts and scene-cut negatives are still open.
 - [x] Add unit tests for color, transitions, pairing, synchronization, windowing, area
-- [ ] Add automated golden media tests (`examples/triggering/*`, `examples/not-triggering/*`)
+- [x] Add automated golden media tests (`examples/triggering/*`, `examples/not-triggering/*`)
+  - covered by `tests/test_golden_media.py`: verdict + schema/annotation regression over the real
+    media cache. The `.lst` files are the tracked source of truth and the media is gitignored, so
+    this module downloads any missing files (throttled, like `util/download_gifs.sh`) and reuses
+    them across runs. It asserts every `triggering.lst` fixture reports `TRIGGERING` and every
+    `not-triggering.lst` fixture stays safe, and that results are not `inconclusive` and carry the
+    standing warnings. An opt-in short-circuit equivalence check (`EPILEPSY_GOLDEN_EQUIP=1`)
+    toggles `TransitionEngine._enable_short_circuit` over the real decode path and asserts an
+    identical measured surface.
 - [ ] Add property tests for determinism, monotonicity, and frame-rate invariance
 - [ ] Add benchmarks at 24/30/60/120 fps and a performance budget
 - [ ] Configure ruff, mypy, pytest, coverage in CI
 - [ ] Publish to PyPI (`epilepsy-warning`) with docs and changelog
 - [x] Rewrite README usage for the stable library API
 
-Current test posture: stdlib `unittest`, 48 tests in `tests/` (color, area, engine, media,
-cli); no pytest, no CI, no benchmarks. `ruff` is configured and the package is
-editable-installed in `.venv`.
+Current test posture: stdlib `unittest`, 68 test methods in `tests/` (color, area, engine, media,
+cli, golden-media); no pytest, no CI, no benchmarks. `ruff` is configured and the package is
+editable-installed in `.venv`. The golden-media module (3 methods) is network-backed: it runs from
+the cached `examples/triggering/*` / `examples/not-triggering/*` media and skips the short-circuit
+equivalence check unless `EPILEPSY_GOLDEN_EQUIP=1`.
 
 ## Phase 4: Modern-content features (P1)
 - [~] Relative-luminance `cd_m2` mode is implemented for the broadcast profiles (SDR: >=20 cd/m²

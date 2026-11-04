@@ -20,6 +20,7 @@
   - `.venv/bin/epilepsy-scan examples/triggering/1.gif`
 - Both fixtures must print `TRIGGERING`. `epilepsy-scan` exits `1` when media is flagged: that is success for these checks, not a command failure. A full `4882.mp4` scan takes roughly 20 seconds with the default grid.
 - Check benign controls stay safe: `.venv/bin/epilepsy-scan examples/not-triggering/*.gif` (all must exit `0`).
+- Golden-media regression automates all of the above: `.venv/bin/python -m unittest tests.test_golden_media` asserts every fixture in `examples/triggering.lst` reports `TRIGGERING` and every fixture in `examples/not-triggering.lst` stays safe, over the cached media (downloaded once, reused across runs). Set `EPILEPSY_GOLDEN_EQUIP=1` to also run the Phase-3 short-circuit equivalence check (toggling `TransitionEngine._enable_short_circuit`) over the real decode path.
 - These are smoke tests; the unit tests cover synthetic timing and area boundaries, but neither proves standards compliance.
 - `ruff` is configured in `pyproject.toml` (`E4`, `E7`, `E9`, `F`, `I`, `B` with `target-version = "py39"`). Run `.venv/bin/ruff check src/epilepsy_warning tests` and `.venv/bin/ruff format <paths>`.
 

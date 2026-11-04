@@ -199,4 +199,4 @@ tracked in `05_implementation_plan.md`. Summary:
 | Typed errors, limits, schema v2 | Done |
 
 Open (P2): PQ/HLG transfer + color metadata, scene-change classification, motion compensation,
-static-pattern analysis, golden-media/property tests + benchmarks + CI, and the Go port.
+static-pattern analysis, property tests + benchmarks + CI, and the Go port.
