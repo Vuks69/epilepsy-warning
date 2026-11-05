@@ -154,9 +154,20 @@ media cache and stays fast (6 methods, ~3-4 s); the performance guard is synthet
 - [ ] Add an optional sample consumer (Discord/Matrix) in `examples/`
 
 ## Immediate next steps
-1. Configure a CI workflow (unit tests + golden-media + property tests).
+1. ~~Configure a CI workflow (unit tests + golden-media + property tests)~~ (done; synthetic suite + ruff. Golden media deferred out of CI — see CI note.)
 2. Decode real video presentation timestamps and color metadata; keep HDR warnings explicit.
 3. ~~Add benchmarks at 24/30/60/120 fps and a performance budget~~ (done; `tests/test_performance.py`,
    relative per-frame-cost guard, see Phase 3).
 4. Validate the area/grid approximation against larger synthetic fixtures and pans/cuts.
 5. Port the engine to Go once the Python schema and fixtures are stable.
+
+CI note (`.github/workflows/ci.yml`): runs the synthetic suite — unit tests, the Phase-3
+short-circuit equivalence test, the property tests, and the per-frame-cost guard — across a Python
+3.9/3.12/3.14 matrix, plus `ruff check`/`format`; intentionally network-free. The hosted-fixture
+regression (`tests/test_golden_media.py`) is **deferred** out of CI and runs local-only with
+`EPILEPSY_GOLDEN_EQUIP=1`: it needs the gitignored media cache plus a third-party CDN, and GitHub
+runners are ephemeral (nothing persists between runs). Reintroducing golden in CI needs an
+`actions/cache` step keyed on the two `.lst` file hashes so the downloaded fixtures persist (it
+then only redownloads when the fixture list changes). Caveat: the giphy/tenor controls are
+third-party and can expire or rate-limit, so a golden job carries a media flakiness risk
+independent of caching.

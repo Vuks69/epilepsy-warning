@@ -1,0 +1,65 @@
+name: CI
+
+# Runs for every push to main and every pull request that targets main, so PRs
+# are gated before merge and main stays green after merge.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # No version chatter in the logs; the pinned versions come from pyproject.
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  # Fast, network-free gate. Unit tests over synthetic timing/area boundaries,
+  # the Phase-3 short-circuit equivalence test (test_engine_optimization), the
+  # Hypothesis property tests (determinism, monotonicity, densification), and
+  # the synthetic per-frame-cost guard. Runs across the supported Python range.
+  # Nothing here needs the gitignored media cache.
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: install (editable + dev)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: run synthetic suite
+        # Explicit modules: the suite that must pass without media. The
+        # hosted-fixture regression (tests.test_golden_media) is intentionally
+        # excluded here - it needs the network + the gitignored media cache and
+        # runs locally, not in CI.
+        run: |
+          python -m unittest \
+            tests.test_engine \
+            tests.test_area \
+            tests.test_color \
+            tests.test_engine_optimization \
+            tests.test_media \
+            tests.test_property \
+            tests.test_performance
+
+      - name: ruff check
+        run: ruff check src tests
+
+      - name: ruff format --check
+        run: ruff format --check src tests
