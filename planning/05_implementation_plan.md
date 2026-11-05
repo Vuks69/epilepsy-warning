@@ -92,15 +92,19 @@ noted in-line).
      headroom above the observed worst-case ~1.85× (120 fps vs 24 fps per-frame), which is the
      legitimate per-frame growth from the `_history` 66 ms window holding more entries at higher
      fps. Synthetic and no media cache, so it runs anywhere (~1.6 s, no network).
-- [x] Configure ruff + mypy in CI (see CI note); pytest and coverage still unconfigured
+- [x] Configure ruff + mypy + pytest + coverage in CI (see CI note)
 - [ ] Publish to PyPI (`epilepsy-warning`) with docs and changelog
 - [x] Rewrite README usage for the stable library API
 
 Current test posture: stdlib `unittest`, 75 test methods in `tests/` (color, area, engine, media,
-cli, golden-media, property, performance); no pytest, no coverage, no benchmarks. CI runs on push
-to `main` and PRs to `main` (see CI note): the synthetic suite + `ruff check`/`format` +
-`mypy src/epilepsy_warning`, network-free across a Python 3.9/3.12/3.14 matrix. `ruff` and `mypy`
-are dev dependencies (`mypy>=1.13`); `ruff` is also configured in `[tool.ruff]`. The package is
+cli, golden-media, property, performance); `pytest` runs the suite and `pytest-cov` reports
+coverage as a guard (no hard CI threshold, since CI only exercises synthetic paths). No benchmarks.
+CI runs on push
+to `main` and PRs to `main` (see CI note): the synthetic suite (run via `pytest`, excluding the
+network-backed golden-media module) + `pytest-cov` coverage guard + `ruff check`/`format` +
+`mypy src/epilepsy_warning`, network-free across a Python 3.9/3.12/3.14 matrix. `ruff`, `mypy`,
+`pytest`, and `pytest-cov` are dev dependencies; `ruff`/`mypy`/`coverage`/`pytest` are configured in
+`[tool.*]`. The package is
 editable-installed in `.venv`. `hypothesis>=6.0` is a dev dependency driving the
 property module. The golden-media module (3 methods) is network-backed: it runs from the cached
 `examples/triggering/*` / `examples/not-triggering/*` media and skips the short-circuit equivalence
@@ -168,7 +172,10 @@ CI note (`.github/workflows/ci.yml`): runs the synthetic suite — unit tests, t
 short-circuit equivalence test, the property tests, and the per-frame-cost guard — across a Python
 3.9/3.12/3.14 matrix, plus `ruff check`/`format` and `mypy src/epilepsy_warning` (type-check the
 library; the public API ships `py.typed`, so own-code typing must hold on every matrix version).
-Intentionally network-free. The hosted-fixture
+The synthetic suite runs via `pytest`, and `pytest-cov` reports library coverage as a guard
+(~85% in CI; `decode.py` reads lower because the real GIF/video decode path is covered only by the
+golden tests, which run locally) — this is a guard, not a hard CI threshold. Intentionally
+network-free. The hosted-fixture
 regression (`tests/test_golden_media.py`) is **deferred** out of CI and runs local-only with
 `EPILEPSY_GOLDEN_EQUIP=1`: it needs the gitignored media cache plus a third-party CDN, and GitHub
 runners are ephemeral (nothing persists between runs). Reintroducing golden in CI needs an

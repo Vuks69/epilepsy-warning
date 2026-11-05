@@ -17,3 +17,10 @@ tmp/
 
 # profiling
 *.lprof
+
+# coverage data
+.coverage
+.coverage.*
+.coverage.*.*
+coverage.xml
+htmlcov/

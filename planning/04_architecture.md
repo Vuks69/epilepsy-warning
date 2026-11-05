@@ -288,8 +288,11 @@ reflected in `warnings`/`inconclusive`.
 - Cross-language conformance: same fixtures and schema, with numeric tolerances.
 - Performance budget tests at 24/30/60/120 fps with a bounded tile grid.
 
-Current coverage: `tests/` (stdlib `unittest`, 48 tests) has color, area, engine, media, and CLI
-tests, and they pass. Unit tests cover sRGB/linear conversion, relative luminance, CIE UCS, red
-saturation, the transition/area/fast-flash state machine, GIF transparency/disposal, and the CLI.
-Golden-media, property, benchmark, and cross-language conformance tests are planned but not yet
-added; there is no CI.
+Current coverage: `tests/` (stdlib `unittest`-style, 75 test methods) has color, area, engine,
+media, and CLI tests, run via `pytest` and passing. Tests cover sRGB/linear conversion, relative
+luminance, CIE UCS, red saturation, the transition/area/fast-flash state machine, GIF
+transparency/disposal, and the CLI. The synthetic suite also ships `test_property.py`
+(determinism, directed monotonicity, frame-rate invariance) and `test_performance.py` (bounded
+per-frame cost at 24/30/60/120 fps); the hosted-fixture `test_golden_media.py` regression runs
+locally only. CI (GitHub Actions, `.github/workflows/ci.yml`) gates pushes and PRs to `main` with
+the synthetic suite plus `ruff` and `mypy` across Python 3.9/3.12/3.14.

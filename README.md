@@ -231,10 +231,25 @@ They are recorded in every result under `assumptions`.
 
 ## Development
 
+Set up the development environment with [`uv`](https://docs.astral.sh/uv/):
+
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+uv venv --python 3.14
+uv pip install -e ".[dev]"
+```
+
+`uv pip install -e ".[dev]"` installs the library (editable) and pulls the dev extras declared in
+`pyproject.toml`: `ruff`, `mypy`, `pytest`, `pytest-cov`, `line-profiler`, and `hypothesis`. The
+venv ships no `pip`; use `uv pip` for any further installs. Then:
+
+```bash
+# Test suite via pytest (excludes the network-backed golden-media module) + coverage report
+.venv/bin/python -m pytest --ignore=tests/test_golden_media.py --cov=epilepsy_warning --cov-report=term-missing -q tests
+
+# Lint + type-check (what CI runs across Python 3.9/3.12/3.14)
 .venv/bin/ruff check src/epilepsy_warning tests
 .venv/bin/ruff format src/epilepsy_warning tests
+.venv/bin/python -m mypy src/epilepsy_warning
 ```
 
 Smoke fixtures (media files are local-only and gitignored):
