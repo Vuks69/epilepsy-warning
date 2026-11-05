@@ -63,3 +63,9 @@ jobs:
 
       - name: ruff format --check
         run: ruff format --check src tests
+
+      - name: mypy
+        # Type-check the library. Failures here are errors, not warnings: the
+        # public API ships with type annotations and a py.typed marker, so the
+        # own-code contract must hold on every Python in the matrix.
+        run: mypy src/epilepsy_warning

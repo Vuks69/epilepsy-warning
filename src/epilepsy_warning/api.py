@@ -167,6 +167,10 @@ def _run(
         raise DecodeError("No frames were decoded")
 
     if early_stop:
+        # The quick result was computed just before early_stop was set above, so
+        # it is always present here; the None branch is defensive.
+        if engine_result is None:
+            raise DecodeError("internal error: quick stop without a result")
         return _build_result(
             engine_result,
             state,

@@ -35,7 +35,7 @@ dependencies = [
 epilepsy-scan = "epilepsy_warning.cli:main"
 
 [project.optional-dependencies]
-dev = ["ruff>=0.6", "line-profiler>=5.0.2", "hypothesis>=6.0"]
+dev = ["ruff>=0.6", "mypy>=1.13", "line-profiler>=5.0.2", "hypothesis>=6.0"]
 
 [tool.ruff]
 target-version = "py39"
@@ -43,6 +43,15 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B"]
+
+# mypy: check the library's own code for type regressions. Third-party stubs
+# (numpy, imageio, line-profiler) are best-effort, so tolerate missing/loose
+# stubs we do not control. warn_unused_ignores is left off on purpose: the
+# optional line-profiler import is intentionally ignored only when that optional
+# dependency is absent.
+[tool.mypy]
+warn_redundant_casts = true
+ignore_missing_imports = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/epilepsy_warning"]

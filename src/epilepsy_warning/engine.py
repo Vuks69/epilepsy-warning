@@ -367,16 +367,19 @@ class TransitionEngine:
             if times[index] < cutoff and not is_coarse_step:
                 continue
             record = history[index]
+            # suffix_min/suffix_max were fully populated by the forward pass
+            # above; mypy still reads them as None and flags None + float, so
+            # silence the operator errors here.
             if index == 0:
-                local_min = record.luminance <= suffix_min[index] + _LOCAL_EXTREMUM_TOLERANCE
-                local_max = record.luminance >= suffix_max[index] - _LOCAL_EXTREMUM_TOLERANCE
+                local_min = record.luminance <= suffix_min[index] + _LOCAL_EXTREMUM_TOLERANCE  # type: ignore[operator]
+                local_max = record.luminance >= suffix_max[index] - _LOCAL_EXTREMUM_TOLERANCE  # type: ignore[operator]
             else:
                 previous = history[index - 1]
                 local_min = (record.luminance <= previous.luminance + _LOCAL_EXTREMUM_TOLERANCE) & (
-                    record.luminance <= suffix_min[index] + _LOCAL_EXTREMUM_TOLERANCE
+                    record.luminance <= suffix_min[index] + _LOCAL_EXTREMUM_TOLERANCE  # type: ignore[operator]
                 )
                 local_max = (record.luminance >= previous.luminance - _LOCAL_EXTREMUM_TOLERANCE) & (
-                    record.luminance >= suffix_max[index] - _LOCAL_EXTREMUM_TOLERANCE
+                    record.luminance >= suffix_max[index] - _LOCAL_EXTREMUM_TOLERANCE  # type: ignore[operator]
                 )
 
             difference_up = now.luminance - record.luminance

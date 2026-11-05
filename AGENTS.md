@@ -25,6 +25,7 @@
 - Performance regression is synthetic and needs no media cache: `.venv/bin/python -m unittest tests.test_performance`. It times `analyze_frames` over a deterministic two-tone clip at 24/30/60/120 fps and asserts the busiest rate stays within `PER_FRAME_COST_GUARD_FACTOR` (3.0×) of the cheapest per-frame cost. This is a machine-independent relative guard (machine speed cancels in the ratio) that tolerates the legitimate per-frame growth from the `_history` 66 ms window while failing on a pathological per-frame blowup. It adds ~1.6 s to the suite.
 - These are smoke tests; the unit tests cover synthetic timing and area boundaries, but neither proves standards compliance.
 - `ruff` is configured in `pyproject.toml` (`E4`, `E7`, `E9`, `F`, `I`, `B` with `target-version = "py39"`). Run `.venv/bin/ruff check src/epilepsy_warning tests` and `.venv/bin/ruff format <paths>`.
+- `mypy` is configured in `pyproject.toml` (`warn_redundant_casts`, `ignore_missing_imports`; `mypy>=1.13` is a dev dependency). Run `.venv/bin/mypy src/epilepsy_warning` to type-check the library (the public API ships `py.typed`). CI runs ruff + mypy across Python 3.9/3.12/3.14; `tests/test_golden_media.py` is intentionally not part of CI.
 
 ## Architecture
 

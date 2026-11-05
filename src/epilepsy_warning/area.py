@@ -86,7 +86,7 @@ def _box_coefficients(in_size: int, out_size: int) -> _BoxCoefficients:
                 run_weight = weight
                 total_weight += weight
 
-        if run_start is None or total_weight == 0.0:
+        if run_start is None or run_end is None or total_weight == 0.0:
             raise ValueError("BOX filter produced an empty source window")
         starts.append(xmin + run_start)
         counts.append(run_end - run_start)
@@ -113,7 +113,7 @@ def _box_downsample_axis(array: np.ndarray, axis: int, in_size: int, out_size: i
         np.cumsum(array, axis=1, dtype=dtype, out=prefix[:, 1:, :])
         sums = (
             prefix[:, coefficients.starts + coefficients.counts, :]
-            - prefix[:, coefficients.starts, :]
+            - prefix[:, coefficients.starts, :]  # type: ignore[operator]
         )
         weight_shape = (1, out_size, 1)
     else:
@@ -121,13 +121,13 @@ def _box_downsample_axis(array: np.ndarray, axis: int, in_size: int, out_size: i
         np.cumsum(array, axis=0, dtype=dtype, out=prefix[1:, :, :])
         sums = (
             prefix[coefficients.starts + coefficients.counts, :, :]
-            - prefix[coefficients.starts, :, :]
+            - prefix[coefficients.starts, :, :]  # type: ignore[operator]
         )
         weight_shape = (out_size, 1, 1)
 
-    sums *= coefficients.weights.reshape(weight_shape)
-    sums += _BOX_ROUNDING
-    sums >>= _BOX_PRECISION_BITS
+    sums *= coefficients.weights.reshape(weight_shape)  # type: ignore[misc]
+    sums += _BOX_ROUNDING  # type: ignore[misc]
+    sums >>= _BOX_PRECISION_BITS  # type: ignore[misc]
     np.clip(sums, 0, 255, out=sums)
     return sums.astype(np.uint8)
 

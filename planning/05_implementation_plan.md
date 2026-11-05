@@ -92,13 +92,16 @@ noted in-line).
      headroom above the observed worst-case ~1.85× (120 fps vs 24 fps per-frame), which is the
      legitimate per-frame growth from the `_history` 66 ms window holding more entries at higher
      fps. Synthetic and no media cache, so it runs anywhere (~1.6 s, no network).
-- [ ] Configure ruff, mypy, pytest, coverage in CI
+- [x] Configure ruff + mypy in CI (see CI note); pytest and coverage still unconfigured
 - [ ] Publish to PyPI (`epilepsy-warning`) with docs and changelog
 - [x] Rewrite README usage for the stable library API
 
 Current test posture: stdlib `unittest`, 75 test methods in `tests/` (color, area, engine, media,
-cli, golden-media, property, performance); no pytest, no CI, no benchmarks. `ruff` is configured
-and the package is editable-installed in `.venv`. `hypothesis>=6.0` is a dev dependency driving the
+cli, golden-media, property, performance); no pytest, no coverage, no benchmarks. CI runs on push
+to `main` and PRs to `main` (see CI note): the synthetic suite + `ruff check`/`format` +
+`mypy src/epilepsy_warning`, network-free across a Python 3.9/3.12/3.14 matrix. `ruff` and `mypy`
+are dev dependencies (`mypy>=1.13`); `ruff` is also configured in `[tool.ruff]`. The package is
+editable-installed in `.venv`. `hypothesis>=6.0` is a dev dependency driving the
 property module. The golden-media module (3 methods) is network-backed: it runs from the cached
 `examples/triggering/*` / `examples/not-triggering/*` media and skips the short-circuit equivalence
 check unless `EPILEPSY_GOLDEN_EQUIP=1`. The property module is fully synthetic, so it needs no
@@ -163,7 +166,9 @@ media cache and stays fast (6 methods, ~3-4 s); the performance guard is synthet
 
 CI note (`.github/workflows/ci.yml`): runs the synthetic suite — unit tests, the Phase-3
 short-circuit equivalence test, the property tests, and the per-frame-cost guard — across a Python
-3.9/3.12/3.14 matrix, plus `ruff check`/`format`; intentionally network-free. The hosted-fixture
+3.9/3.12/3.14 matrix, plus `ruff check`/`format` and `mypy src/epilepsy_warning` (type-check the
+library; the public API ships `py.typed`, so own-code typing must hold on every matrix version).
+Intentionally network-free. The hosted-fixture
 regression (`tests/test_golden_media.py`) is **deferred** out of CI and runs local-only with
 `EPILEPSY_GOLDEN_EQUIP=1`: it needs the gitignored media cache plus a third-party CDN, and GitHub
 runners are ephemeral (nothing persists between runs). Reintroducing golden in CI needs an

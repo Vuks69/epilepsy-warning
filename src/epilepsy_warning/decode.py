@@ -13,7 +13,7 @@ import io
 import math
 import os
 from dataclasses import dataclass, field
-from typing import Any, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Iterator, List, Optional, Sequence, Tuple, Union, cast
 
 import imageio
 import numpy as np
@@ -419,7 +419,9 @@ def _video_frames(
         if container_duration > options.max_duration_seconds:
             state.add_warning("duration_limit_reached")
 
-        for index, frame in enumerate(reader):
+        # imageio's FormatReader is stubbed as __iter__ -> Array (not an
+        # iterator), so enumerate() cannot infer the frame type; retype it.
+        for index, frame in enumerate(cast(Iterator[Any], reader)):
             if index % step != 0:
                 continue
             timestamp = index / native_fps
