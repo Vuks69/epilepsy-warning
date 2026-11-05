@@ -272,3 +272,5 @@ compositing, the uint8 tiling path (`tile_frame_uint8`), and a bit-exact numpy B
 used as a fallback. Pillow remains the normal resize path because its C implementation is
 faster here. Phase 3 (algorithmic engine changes) is documented but not started. None of this
 changed detector semantics or the `tile_grid_max` default.
+
+The Jester was here
