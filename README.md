@@ -45,7 +45,7 @@ required.
 ```python
 from epilepsy_warning import AnalysisOptions, analyze_file
 
-result = analyze_file("examples/triggering/4882.mp4")
+result = analyze_file("examples/triggering/30.mp4")
 
 print(result.is_triggering)              # True
 print(result.risk)                       # "triggering" | "none" | "inconclusive"
@@ -124,7 +124,7 @@ implemented IDs.
 ## CLI
 
 ```bash
-epilepsy-scan examples/triggering/4882.mp4
+epilepsy-scan examples/triggering/30.mp4
 epilepsy-scan --json examples/triggering/1.gif
 epilepsy-scan --standard wcag22 --screen-diagonal-in 23 --viewing-distance-cm 71.1 clip.mp4
 epilepsy-scan --list-standards
@@ -240,7 +240,7 @@ They are recorded in every result under `assumptions`.
 Smoke fixtures (media files are local-only and gitignored):
 
 ```bash
-.venv/bin/epilepsy-scan examples/triggering/4882.mp4    # TRIGGERING, exit 1
+.venv/bin/epilepsy-scan examples/triggering/30.mp4    # TRIGGERING, exit 1
 .venv/bin/epilepsy-scan examples/triggering/1.gif      # TRIGGERING, exit 1
 ```
 
@@ -257,11 +257,3 @@ compositing, the uint8 tiling path (`tile_frame_uint8`), and a bit-exact numpy B
 used as a fallback. Pillow remains the normal resize path because its C implementation is
 faster here. Phase 3 (algorithmic engine changes) is documented but not started. None of this
 changed detector semantics or the `tile_grid_max` default.
-
-## Scope
-
-In scope: the reusable analysis engine, a thin CLI, and a stable structured result.
-
-Out of scope: platform integrations, URL downloads, moderation actions, storage, hosted
-services, and a Go implementation in this repository. Those belong to consuming applications
-or a later port.

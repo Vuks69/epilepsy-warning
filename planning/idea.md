@@ -58,7 +58,7 @@ https://dl.acm.org/doi/10.1145/3694790
 
 ## Examples for testing
 
-- `./examples/triggering/4882.mp4` is a video where the frames are one uniform color, changing
+- `./examples/triggering/30.mp4` is a video where the frames are one uniform color, changing
   color and brightness at random intervals.
 - `./examples/triggering.lst` is a collection of direct GIF links that are considered
   seizure-inducing (they would be removed in a Discord server by a moderator).

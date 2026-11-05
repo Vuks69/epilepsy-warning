@@ -16,9 +16,9 @@
 - Run the unit tests:
   - `.venv/bin/python -m unittest discover -s tests -v`
 - Verify known triggering media:
-  - `.venv/bin/epilepsy-scan examples/triggering/4882.mp4`
+  - `.venv/bin/epilepsy-scan examples/triggering/30.mp4`
   - `.venv/bin/epilepsy-scan examples/triggering/1.gif`
-- Both fixtures must print `TRIGGERING`. `epilepsy-scan` exits `1` when media is flagged: that is success for these checks, not a command failure. A full `4882.mp4` scan takes roughly 20 seconds with the default grid.
+- Both fixtures must print `TRIGGERING`. `epilepsy-scan` exits `1` when media is flagged: that is success for these checks, not a command failure. A full `30.mp4` scan takes roughly 20 seconds with the default grid.
 - Check benign controls stay safe: `.venv/bin/epilepsy-scan examples/not-triggering/*.gif` (all must exit `0`).
 - Golden-media regression automates all of the above: `.venv/bin/python -m unittest tests.test_golden_media` asserts every fixture in `examples/triggering.lst` reports `TRIGGERING` and every fixture in `examples/not-triggering.lst` stays safe, over the cached media (downloaded once, reused across runs). Set `EPILEPSY_GOLDEN_EQUIP=1` to also run the Phase-3 short-circuit equivalence check (toggling `TransitionEngine._enable_short_circuit`) over the real decode path.
 - Property regression is synthetic and needs no media cache: `.venv/bin/python -m unittest tests.test_property`. Hypothesis properties assert byte-stable `to_json()`/`to_dict()` output, directed monotonicity (critical-difference step, uniform area scaling, transition-count), and densification invariance of the verdict and transition-level measurements — `max_transition_duration_ms` is intentionally exempt, as a coarse single-frame step resolves to a real duration once more samples bracket it.
@@ -48,7 +48,7 @@
 - A single-frame step sampled at an interval longer than the 66 ms cutoff is treated as an unresolved hard cut (`duration_ms=0`). This is deliberate recall insurance for low-frame-rate GIFs, not a measured transition duration; it can over-count a real fade that spans one coarse sample interval.
 - Looping GIFs shorter than one second are repeated through enough cycles to cover roughly one second plus one cycle (`gif_loop_repeated_analysis`); longer looping GIFs get a synthetic loop-seam frame (`gif_loop_wrap_analyzed`). Synthetic frames are analysis-only and do not change the reported media duration.
 - Video timestamps come from constant container frame rate, not per-frame presentation timestamps. Color management assumes sRGB; motion compensation and scene-change classification are not implemented.
-- Media files are gitignored (`*.mp4`, `*.gif`); only the two list files (`examples/triggering.lst`, `examples/not-triggering.lst`) are tracked. `4882.mp4` and the numbered GIFs exist locally only. Recreate them with `cd examples && ../util/download_gifs.sh triggering.lst` and `../util/download_gifs.sh not-triggering.lst` (uses `wget`, waits 5 seconds between downloads). Add media with `git add -f` only deliberately.
+- Media files are gitignored (`*.mp4`, `*.gif`); only the two list files (`examples/triggering.lst`, `examples/not-triggering.lst`) are tracked. `30.mp4` and the numbered GIFs exist locally only. Recreate them with `cd examples && ../util/download_gifs.sh triggering.lst` and `../util/download_gifs.sh not-triggering.lst` (uses `wget`, waits 5 seconds between downloads). Add media with `git add -f` only deliberately.
 - CLI exit codes are `0` safe, `1` triggering, and `2` error/inconclusive. Truncated analyses set `inconclusive=True` and warn.
 
 ## Conventions
