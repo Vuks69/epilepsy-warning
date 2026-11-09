@@ -63,7 +63,8 @@ code and owns all platform-specific concerns (intents, downloads, moderation act
 
 ## Known gaps not yet closed
 
-- PQ/HLG transfer functions and wide-gamut handling; color metadata is not read (assumed sRGB).
+- PQ/HLG transfer functions and wide-gamut handling are implemented and opt-in; color metadata
+  is not read from the file (assumed sRGB unless `transfer`/`color_space` is set explicitly).
 - Scene-change/inversion classification for broadcast profiles.
 - Motion compensation (experimental, opt-in, no public thresholds).
 - Static bold-pattern analysis (separate detector, later).
@@ -83,8 +84,9 @@ code and owns all platform-specific concerns (intents, downloads, moderation act
 
 ## Next steps
 
-1. Finalize schema v2 and the standards-profile contract.
-2. Refactor the analyzer into a standalone Python library.
-3. Replace frame-difference counting with timed transitions and the 6-transition limit.
-4. Implement WCAG 2.2 red and the 416x416 CSS-px area model.
-5. Build the synthetic corpus, then add HDR/profiles, then port to Go.
+1. Go port with the same API shape and schema v2, sharing the color test vectors.
+2. Color-space / transfer metadata auto-detection from the file (currently caller-declared via
+   `transfer`/`color_space`); color is still assumed sRGB until then.
+3. Scene-change/inversion classification for broadcast profiles.
+4. Benchmarks and CI hardening (the synthetic suite plus `ruff`/`mypy` already run in CI).
+5. Motion compensation and static-pattern analysis are out of scope for v1.

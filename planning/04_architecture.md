@@ -193,7 +193,7 @@ Proposed cross-language shape (schema v2):
     "color_space": "bt709",
     "transfer": "srgb"
   },
-  "warnings": ["color_metadata_missing"],
+  "warnings": ["color_space_assumed_srgb"],
   "analyzer": {
     "name": "epilepsy-warning",
     "version": "1.0.0",
@@ -271,7 +271,8 @@ reflected in `warnings`/`inconclusive`.
 
 ## Testing strategy
 
-- Unit tests: sRGB/linear conversion, relative luminance, CIE XYZ/UCS, red difference, transition
+- Unit tests: sRGB/linear conversion, relative luminance, CIE XYZ/UCS, red difference, PQ/HLG
+  transfer round-trips and reference anchors, and P3-D65 / BT.2020 wide-gamut decode; transition
   state machine, pairing, windowing, area tiles, fast-flash merge.
 - Synthetic timing fixtures:
   - 6 transitions/s passes; 7 fails.
@@ -288,7 +289,7 @@ reflected in `warnings`/`inconclusive`.
 - Cross-language conformance: same fixtures and schema, with numeric tolerances.
 - Performance budget tests at 24/30/60/120 fps with a bounded tile grid.
 
-Current coverage: `tests/` (stdlib `unittest`-style, 75 test methods) has color, area, engine,
+Current coverage: `tests/` (stdlib `unittest`-style, 83 test methods) has color, area, engine,
 media, and CLI tests, run via `pytest` and passing. Tests cover sRGB/linear conversion, relative
 luminance, CIE UCS, red saturation, the transition/area/fast-flash state machine, GIF
 transparency/disposal, and the CLI. The synthetic suite also ships `test_property.py`

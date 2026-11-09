@@ -96,7 +96,7 @@ noted in-line).
 - [ ] Publish to PyPI (`epilepsy-warning`) with docs and changelog
 - [x] Rewrite README usage for the stable library API
 
-Current test posture: stdlib `unittest`, 75 test methods in `tests/` (color, area, engine, media,
+Current test posture: stdlib `unittest`, 83 test methods in `tests/` (color, area, engine, media,
 cli, golden-media, property, performance); `pytest` runs the suite and `pytest-cov` reports
 coverage as a guard (no hard CI threshold, since CI only exercises synthetic paths). No benchmarks.
 CI runs on push
@@ -113,10 +113,16 @@ media cache and stays fast (6 methods, ~3-4 s); the performance guard is synthet
 ~1.6 s.
 
 ## Phase 4: Modern-content features (P1)
-- [~] Relative-luminance `cd_m2` mode is implemented for the broadcast profiles (SDR: >=20 cd/m²
+- [x] Relative-luminance `cd_m2` mode is implemented for the broadcast profiles (SDR: >=20 cd/m²
   change when darker state <160 cd/m²; HDR: Michelson contrast >= 1/17 when darker state
-  >=160 cd/m²), with a configurable `reference_luminance_cd_m2` (default 200). PQ/HLG transfer
-  functions and wide-gamut handling are not yet done (color is always assumed sRGB).
+  >=160 cd/m²), with a configurable `reference_luminance_cd_m2` (default 200). The decoded value
+  is *relative luminance* where 1.0 == the reference ceiling, so the engine multiplies by
+  `reference` to get cd/m². PQ (ST 2084, `eotf(0.508) ~ 100 cd/m²`, peak code == reference) and
+  HLG (ARIB STD-B67, code 0.5 == reference white, code 1.0 ~ 12x reference) transfer functions
+  and P3-D65 / BT.2020 wide-gamut matrices are implemented; they activate only for a non-sRGB
+  transfer or declared wide gamut (`--transfer`, `--color-space`, or media metadata), and the
+  default sRGB path stays byte-identical. Wide-gamut out-of-sRGB colors clamp toward black; the
+  matrices preserve white and neutral luminance.
 - [ ] Color-space metadata detection via ffprobe/ffmpeg; explicit warnings when missing. Color is
   always assumed sRGB and reported with `color_space_assumed_srgb`.
 - [x] **65 Hz** fast-flash merge and mixed-rate guard

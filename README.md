@@ -85,6 +85,10 @@ options = AnalysisOptions(
     max_frames=5000,
     max_bytes=64 * 1024 * 1024,
     analysis_timeout_seconds=60.0,
+    # For non-sRGB media where the source is known, set the transfer and gamut
+    # explicitly; both default to "auto" (sRGB/SDR), the byte-identical path.
+    transfer="auto",               # auto | srgb | pq | hlg
+    color_space="auto",            # auto | srgb | bt709 | p3_d65 | bt2020
     # quick=True stops as soon as a triggering prefix is confirmed and returns
     # a partial result marked `quick` (faster; may over-report fast flashes).
     quick=False,
@@ -161,12 +165,14 @@ before giving up, so it is measurably *slower* on safe media, not faster. Its re
 opt-in — the default is always a complete scan. `--json` emits one
 object for a single file and an array for multiple files. Other useful flags include
 `--area-model`, `--max-flashes-per-second`, `--max-duration-seconds`, `--max-frames`,
-`--sample-fps`, `--strict-limits`, `--no-fast-flash-merge`, and `--extended-exposure`.
+`--sample-fps`, `--strict-limits`, `--no-fast-flash-merge`, `--extended-exposure`,
+`--transfer` (auto/srgb/pq/hlg), and `--color-space` (auto/srgb/bt709/p3_d65/bt2020).
 `epilepsy-scan --help` lists the full set.
 
 ## Detection model
 
-1. Frames are gamma-expanded from sRGB and reduced to a per-tile grid.
+1. Frames are gamma-expanded from sRGB (or decoded from PQ/HLG for non-sRGB media, after a
+   wide-gamut conversion) and reduced to a per-tile grid.
 2. A luminance transition is accepted only when the darker level is below 0.80 relative
    luminance, the difference reaches 0.10, and the change reaches the new level within 66 ms.
    The local-extremum test rejects slow monotonic fades. When the sample interval itself is
@@ -199,7 +205,10 @@ They are recorded in every result under `assumptions`.
   high-frequency patterns can be averaged away; `tile_averaging_approximation` is always
   reported. Raise `tile_grid_max` at the cost of speed.
 - Video timestamps come from the container frame rate, not per-frame presentation timestamps.
-- Color management is assumed sRGB. HDR/PQ/HLG and embedded ICC profiles are not interpreted.
+- Color defaults to sRGB. PQ/HLG transfer and P3-D65 / BT.2020 wide-gamut decoding are
+  supported when the source is known: set `--transfer`/`--color-space` (or
+  `transfer`/`color_space`) explicitly, since color metadata is not yet auto-detected from the
+  file. Embedded ICC profiles are still not interpreted.
 - GIF transparency is composited over white and GIF disposal is applied explicitly. Other page
   backgrounds are not configurable; `transparency_composited_white` is reported when needed.
 - A looping GIF shorter than one second is analyzed across repeated cycles covering roughly one

@@ -9,12 +9,13 @@ assumptions, and warnings about what was *not* checked.
 from __future__ import annotations
 
 import time
-from typing import Any, Iterable, List, Optional, Sequence
+from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 from ._version import __version__
 from .area import AreaEvaluator, TileGrid, tile_frame_uint8
+from .color import decode_to_srgb_linear
 from .decode import (
     DecodeState,
     FrameRecord,
@@ -44,6 +45,65 @@ _ENGINE_WARNINGS = (
     "not_a_compliance_determination",
     "tile_averaging_approximation",
 )
+
+# Metadata aliases the decoder may emit, mapped to the canonical decode value.
+# sRGB (and its SDR variants) map to None so the caller's assumption wins; only
+# a real PQ/HLG declaration overrides.  None means "unknown / assumed".
+_TRANSFER_ALIASES = {
+    "srgb_assumed": None,
+    "srgb": None,
+    "bent60": None,
+    "std_601": None,
+    "pq": "pq",
+    "st2084": "pq",
+    "hlg": "hlg",
+    "arib_b67": "hlg",
+    "std_b67": "hlg",
+}
+
+_COLOR_SPACE_ALIASES = {
+    "srgb_assumed": None,
+    "srgb": None,
+    "bt709": "bt709",
+    "rec709": "bt709",
+    "p3": "p3_d65",
+    "p3_d65": "p3_d65",
+    "dci_p3": "p3_d65",
+    "dci-p3": "p3_d65",
+    "bt2020": "bt2020",
+    "rec2020": "bt2020",
+    "bt_2020": "bt2020",
+}
+
+
+def _declared_transfer(declared: Optional[str]) -> Optional[str]:
+    """Normalize a decoder-reported transfer, or None if it is an assumption."""
+    return _TRANSFER_ALIASES.get((declared or "").lower())
+
+
+def _declared_color_space(declared: Optional[str]) -> Optional[str]:
+    """Normalize a decoder-reported color space, or None if assumed sRGB."""
+    return _COLOR_SPACE_ALIASES.get((declared or "").lower())
+
+
+def _color_context(options: AnalysisOptions, state: DecodeState) -> Tuple[str, str, bool]:
+    """Resolve the effective transfer, canonical gamut, and whether to decode.
+
+    The caller's assumptions drive the result; a media-declared PQ/HLG or
+    wide-gamut declaration overrides only when it is known.  ``decode_hdr`` is
+    True when either the transfer or the gamut needs the decoded (float) route,
+    so the default sRGB SDR path stays on the byte-identical uint8 route.
+    """
+    transfer = options.effective_transfer
+    color_space = options.effective_color_space
+    declared_transfer = _declared_transfer(state.transfer)
+    if declared_transfer is not None:
+        transfer = declared_transfer
+    declared_color_space = _declared_color_space(state.color_space)
+    if declared_color_space is not None:
+        color_space = declared_color_space
+    decode_hdr = transfer != "srgb" or color_space in ("p3_d65", "bt2020")
+    return transfer, color_space, decode_hdr
 
 
 def analyze_file(
@@ -107,6 +167,12 @@ def _run(
     profile = options.resolved_profile()
     area_model = options.resolved_area_model(profile)
 
+    # Effective transfer and gamut drive the decode route.  A media-declared
+    # value (from container metadata, once the decoder reads it) overrides the
+    # caller's assumption when it is known; the decoder defaults to the assumed
+    # sRGB SDR path, which keeps the default byte-identical.
+    transfer, color_space, decode_hdr = _color_context(options, state)
+
     engine: Optional[TransitionEngine] = None
     area: Optional[AreaEvaluator] = None
     grid: Optional[TileGrid] = None
@@ -136,7 +202,15 @@ def _run(
             engine = TransitionEngine(options, profile, area)
 
         assert engine is not None and grid is not None
-        engine.add_frame(record.timestamp, tile_frame_uint8(frame, grid))
+        tiles = tile_frame_uint8(frame, grid)
+        if decode_hdr:
+            # Decode the real transfer and gamut to relative sRGB linear light,
+            # then hand the float tiles to the engine's linear ingest path.
+            engine.add_frame_linear(
+                record.timestamp, decode_to_srgb_linear(tiles / 255.0, color_space, transfer)
+            )
+        else:
+            engine.add_frame(record.timestamp, tiles)
         frames += 1
         # The analyzed span is how much media was actually scanned. It grows
         # with every frame — including synthetic repeat cycles added for short
@@ -211,6 +285,8 @@ def _build_result(
     analyzed_span_seconds: float = 0.0,
 ) -> AnalysisResult:
     warnings: List[str] = []
+    # Resolve the effective transfer/gamut for the color-context warnings.
+    transfer, color_space, decode_hdr = _color_context(options, state)
     for warning in state.warnings:
         if warning not in warnings:
             warnings.append(warning)
@@ -231,6 +307,10 @@ def _build_result(
         warnings.append("analysis_incomplete")
     if quick:
         warnings.append("analysis_early_stopped")
+    if decode_hdr and transfer in ("pq", "hlg"):
+        warnings.append("transfer_%s" % transfer)
+    if color_space in ("p3_d65", "bt2020"):
+        warnings.append("color_space_%s" % color_space)
 
     is_triggering = engine_result.is_triggering
     inconclusive = bool(state.truncated)
@@ -293,8 +373,8 @@ def _build_result(
         width=int(state.width or grid.width),
         height=int(state.height or grid.height),
         bytes=state.bytes,
-        color_space=state.color_space,
-        transfer=state.transfer,
+        color_space=options.effective_color_space,
+        transfer=options.effective_transfer,
     )
 
     analyzer = AnalyzerInfo(

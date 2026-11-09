@@ -192,11 +192,12 @@ tracked in `05_implementation_plan.md`. Summary:
 | 20 ms area synchronization | Done |
 | 65 Hz fast-flash merge + mixed-rate guard | Done (on by default) |
 | WCAG 2.2 / ISO red: linear `R/(R+G+B) >= 0.8` + CIE 1976 UCS >= 0.2 | Done |
-| Relative-luminance + HDR (cd/m² SDR, Michelson 1/17) | Partial: relative model done; PQ/HLG transfer not |
+| Relative-luminance + HDR (cd/m² SDR, Michelson 1/17) | Done; transfer + wide-gamut decode are opt-in and media color metadata is not auto-detected |
 | 10-degree / 416x416 CSS-px area model + small-source clamping | Done |
 | Standards profiles (WCAG/ISO/ITU/Ofcom/Japan) | Profiles registered; Japan not implemented |
 | GIF loop wrap-around | Done |
 | Typed errors, limits, schema v2 | Done |
 
-Open (P2): PQ/HLG transfer + color metadata, scene-change classification, motion compensation,
-static-pattern analysis, benchmarks + CI, and the Go port (golden-media and property tests are done).
+Open (P2): PQ/HLG + wide-gamut *color metadata* (auto-detection from file), scene-change
+classification, motion compensation, static-pattern analysis, benchmarks + CI, and the Go port
+(golden-media and property tests are done).

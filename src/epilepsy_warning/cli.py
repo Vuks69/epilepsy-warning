@@ -81,6 +81,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="override the profile's area model",
     )
     parser.add_argument(
+        "--transfer",
+        choices=("auto", "srgb", "pq", "hlg"),
+        help=(
+            "decode transfer for non-sRGB media (default: auto, meaning assume "
+            "sRGB unless the file declares PQ/HLG)"
+        ),
+    )
+    parser.add_argument(
+        "--color-space",
+        choices=("auto", "srgb", "bt709", "p3_d65", "bt2020"),
+        help="source gamut for non-sRGB media (default: auto, meaning assume sRGB)",
+    )
+    parser.add_argument(
         "--max-flashes-per-second",
         type=float,
         metavar="RATE",
@@ -153,6 +166,10 @@ def _options_from_args(args: argparse.Namespace) -> AnalysisOptions:
     }
     if args.area_model is not None:
         overrides["area_model"] = args.area_model
+    if args.transfer is not None:
+        overrides["transfer"] = args.transfer
+    if args.color_space is not None:
+        overrides["color_space"] = args.color_space
     if args.max_flashes_per_second is not None:
         overrides["max_flashes_per_second"] = args.max_flashes_per_second
     if args.max_bytes is not None:

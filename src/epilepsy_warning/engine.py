@@ -157,11 +157,10 @@ class TransitionEngine:
         # high-transition-but-safe content cannot drive unbounded work.
         self._quick_confirmations = 0
 
-    @profile
-    def add_frame(self, timestamp: float, tiles_rgb: np.ndarray) -> None:
-        linear = srgb_to_linear(tiles_rgb)
-        luminance, redness, red, u, v = linear_rgb_features(linear, self.options.red_saturation)
-        record = _HistoryRecord(
+    def _make_record(self, linear_rgb: np.ndarray, timestamp: float) -> _HistoryRecord:
+        """Build a history record from already-decoded linear sRGB tiles."""
+        luminance, redness, red, u, v = linear_rgb_features(linear_rgb, self.options.red_saturation)
+        return _HistoryRecord(
             timestamp=float(timestamp),
             luminance=luminance,
             red=red,
@@ -169,6 +168,17 @@ class TransitionEngine:
             u=u,
             v=v,
         )
+
+    def _ingest(
+        self, record: _HistoryRecord, tiles_for_compare: np.ndarray, timestamp: float
+    ) -> None:
+        """Append a record and run the pruning, red-pool, and detection pass.
+
+        Shared by :meth:`add_frame` (the uint8 sRGB route) and
+        :meth:`add_frame_linear` (the decoded HDR/wide-gamut route).  The
+        duplicate-frame short-circuit compares the raw tiles it was handed, so
+        each route compares its own type against its own ``_last_grid``.
+        """
         self._history.append(record)
 
         cutoff = timestamp - self.max_duration_s
@@ -181,8 +191,8 @@ class TransitionEngine:
         # run when the red guard is active; when disabled this is dead weight
         # avoided entirely so the disabled path matches the old code exactly.
         if self._enable_short_circuit:
-            if red.any():
-                self._red_pool |= red
+            if record.red.any():
+                self._red_pool |= record.red
             if pruned:
                 # A pop invalidates the running OR, so rebuild it.  Until the
                 # next prune the pool may be a conservative superset, which is
@@ -215,14 +225,31 @@ class TransitionEngine:
             and not pruned
             and not self._last_frame_changed_direction
             and self._last_grid is not None
-            and np.array_equal(tiles_rgb, self._last_grid)
+            and np.array_equal(tiles_for_compare, self._last_grid)
         ):
-            self._last_grid = tiles_rgb
+            self._last_grid = tiles_for_compare
             return
-        self._last_grid = tiles_rgb
+        self._last_grid = tiles_for_compare
 
         self._detect_luminance(timestamp, cutoff)
         self._detect_red(timestamp, cutoff)
+
+    @profile
+    def add_frame(self, timestamp: float, tiles_rgb: np.ndarray) -> None:
+        linear = srgb_to_linear(tiles_rgb)
+        record = self._make_record(linear, timestamp)
+        self._ingest(record, tiles_rgb, timestamp)
+
+    def add_frame_linear(self, timestamp: float, tiles_linear_rgb: np.ndarray) -> None:
+        """Ingest already-decoded linear sRGB tiles (HDR / wide-gamut media).
+
+        The transfer (PQ/HLG) and gamut conversion are applied upstream in
+        :mod:`api` (or :mod:`color`); here the tiles are plain relative sRGB
+        linear light where 1.0 == the reference luminance the cd/m2 path scales
+        by.  The float grid is compared exactly for the duplicate short-circuit.
+        """
+        record = self._make_record(tiles_linear_rgb, timestamp)
+        self._ingest(record, tiles_linear_rgb, timestamp)
 
     def finish(self) -> EngineResult:
         candidates = self._candidates()

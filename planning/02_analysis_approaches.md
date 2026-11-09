@@ -153,8 +153,9 @@ Still open (tracked in `05_implementation_plan.md`):
 - Scene-change/inversion classification for broadcast profiles (not implemented; WCAG default
   documents that it does not classify these).
 - Motion compensation (experimental pre-filter, opt-in, no public thresholds).
-- PQ/HLG transfer-function and wide-gamut color handling; color-space metadata detection is not
-  done (color is always assumed sRGB and reported as such).
+- PQ/HLG transfer-function and wide-gamut color handling are implemented (opt-in via
+  `transfer`/`color_space`); only color-space metadata detection is not done, so color is still
+  assumed sRGB unless the caller declares it.
 - Static bold-pattern analysis (separate detector, later).
 - Automated golden-media and property tests are done (`tests/test_golden_media.py`,
   `tests/test_property.py`); benchmarks and CI are still open.

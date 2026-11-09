@@ -10,6 +10,49 @@ from typing import Any, Dict, Optional, Tuple
 from .errors import InvalidOptionsError
 from .standards import StandardProfile, get_profile
 
+# Recognized color-space names, keyed by the canonical label reported in results.
+# Rec.709 shares sRGB's primaries (both D65), so it needs no gamut matrix.
+_COLOR_SPACES = frozenset(
+    {
+        "auto",
+        "srgb",
+        # Rec.709 / BT.709 primaries == sRGB primaries (both D65).
+        "bt709",
+        "rec709",
+        "rec.709",
+        # DCI-P4 / P3-D65.
+        "p3",
+        "p3_d65",
+        "p4",
+        "dci-p3",
+        "dci-p4",
+        # BT.2020 / Rec.2020.
+        "bt2020",
+        "2020",
+        "rec2020",
+        "rec.2020",
+        "bt.2020",
+    }
+)
+
+# Canonical color-space label per recognized alias.
+_COLOR_SPACE_ALIASES = {
+    "srgb": "srgb",
+    "bt709": "bt709",
+    "rec709": "bt709",
+    "rec.709": "bt709",
+    "p3": "p3_d65",
+    "p3_d65": "p3_d65",
+    "p4": "p3_d65",
+    "dci-p3": "p3_d65",
+    "dci-p4": "p3_d65",
+    "bt2020": "bt2020",
+    "2020": "bt2020",
+    "rec2020": "bt2020",
+    "rec.2020": "bt2020",
+    "bt.2020": "bt2020",
+}
+
 
 @dataclass(frozen=True)
 class DisplayGeometry:
@@ -66,6 +109,7 @@ class AnalysisOptions:
     display: Optional[DisplayGeometry] = None
     reference_luminance_cd_m2: float = 200.0
     color_space: str = "auto"
+    transfer: str = "auto"
     motion_compensation: bool = False
     extended_exposure: bool = False
     max_bytes: int = 64 * 1024 * 1024
@@ -109,8 +153,12 @@ class AnalysisOptions:
             raise InvalidOptionsError("flash_area_frame_fraction must be in (0, 1]")
         if self.reference_luminance_cd_m2 <= 0:
             raise InvalidOptionsError("reference_luminance_cd_m2 must be positive")
-        if self.color_space.lower() not in ("auto", "srgb"):
-            raise InvalidOptionsError("color_space must be 'auto' or 'srgb'")
+        if self.color_space.lower() not in _COLOR_SPACES:
+            raise InvalidOptionsError(
+                "color_space must be one of %s" % ", ".join(sorted(_COLOR_SPACES))
+            )
+        if self.transfer.lower() not in ("auto", "srgb", "pq", "hlg"):
+            raise InvalidOptionsError("transfer must be 'auto', 'srgb', 'pq', or 'hlg'")
         if self.area_model is not None and self.area_model not in (
             "wcag_solid_angle",
             "screen_fraction",
@@ -150,8 +198,22 @@ class AnalysisOptions:
         return int(round(self.max_flashes_per_second * 2.0))
 
     @property
+    def effective_transfer(self) -> str:
+        """Decode transfer actually used: ``srgb``, ``pq``, or ``hlg``.
+
+        ``auto`` falls back to sRGB; the caller supplies ``pq``/``hlg`` only when
+        the media's transfer is known (from container metadata or an explicit
+        override), because the default assumption is SDR sRGB.
+        """
+        return {"auto": "srgb", "srgb": "srgb", "pq": "pq", "hlg": "hlg"}[self.transfer.lower()]
+
+    @property
     def effective_color_space(self) -> str:
-        return "srgb"
+        """Canonical color-space label actually used (or ``srgb`` for ``auto``)."""
+        key = self.color_space.lower()
+        if key == "auto":
+            return "srgb"
+        return _COLOR_SPACE_ALIASES[key]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -173,6 +235,7 @@ class AnalysisOptions:
             "display": self.display.to_dict() if self.display else None,
             "reference_luminance_cd_m2": self.reference_luminance_cd_m2,
             "color_space": self.color_space,
+            "transfer": self.transfer,
             "motion_compensation": self.motion_compensation,
             "extended_exposure": self.extended_exposure,
             "max_bytes": self.max_bytes,
